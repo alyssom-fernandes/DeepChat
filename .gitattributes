@@ -1,0 +1,5 @@
+# Normaliza fim de linha (LF no repositório, mesmo vindo do Windows)
+* text=auto
+*.png binary
+*.jpg binary
+*.ico binary

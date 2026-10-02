@@ -1,221 +1,332 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-tema="escuro">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>DeepChat | Validador Cruzado de IAs</title>
-<meta name="description" content="Chat que consulta DeepSeek e usa ChatGPT como revisor crítico — tudo no seu navegador, sem servidor.">
-<meta property="og:title" content="DeepChat — Validador Cruzado de IAs">
-<meta property="og:description" content="DeepSeek responde. ChatGPT revisa. Você decide.">
-<meta name="theme-color" content="#080410">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'self';
+           script-src 'self' https://cdn.jsdelivr.net/npm/marked@9.1.6/ https://cdn.jsdelivr.net/npm/dompurify@3.4.16/;
+           style-src 'self' https://fonts.googleapis.com;
+           font-src https://fonts.gstatic.com;
+           connect-src https://api.deepseek.com https://api.openai.com;
+           img-src 'self' data: blob:;
+           object-src 'none';
+           base-uri 'none';
+           form-action 'none'">
+<title>DeepChat · Uma IA responde, outra revisa</title>
+<meta name="description" content="Chat que manda a pergunta ao DeepSeek e a resposta ao ChatGPT para revisar, com um veredito: correta, parcialmente correta ou incorreta. Tudo no navegador, sem servidor.">
+<meta name="theme-color" content="#141416">
+<meta name="color-scheme" content="dark light">
+<link rel="canonical" href="https://alyssom-fernandes.github.io/DeepChat/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:title" content="DeepChat · Uma IA responde, outra revisa">
+<meta property="og:description" content="O DeepSeek responde, o ChatGPT confere e dá um veredito. Tudo no navegador, sem servidor.">
+<meta property="og:url" content="https://alyssom-fernandes.github.io/DeepChat/">
+<meta property="og:image" content="https://alyssom-fernandes.github.io/DeepChat/docs/telas/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+<!-- tema antes de pintar e registro de falhas -->
+<script src="js/boot.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@85..100,400..700&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="css/style.css">
+
+<!-- Markdown seguro: marked + DOMPurify, versões fixas e conferidas (SRI) -->
+<script defer src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js" integrity="sha256-YAKvY0hbBD+mDdq6GzQ2O5jSqLLGO2BwBPOiQFqKBTo=" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js" integrity="sha256-LJCptG1kY/JgOKKbaG6CvJHeAf2snVIp58/js2ATTqI=" crossorigin="anonymous"></script>
+<script type="module" src="js/app.js"></script>
 </head>
 <body>
+<a class="pular" href="#pergunta">Ir para o campo da pergunta</a>
 
-<!-- LOGIN -->
-<div id="loginScreen">
-  <div class="login-container">
-    <div class="login-header">
-      <svg class="lock-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
-      <h1>DEEPCHAT</h1>
-      <p>Validador cruzado de IAs — insira suas chaves para começar</p>
+<!-- ═══════════════════════════════ INÍCIO ═══════════════════════════════ -->
+<div class="inicio" id="telaInicio" hidden>
+  <section class="inicio-apresenta" aria-labelledby="inicioTitulo">
+    <div class="logo">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle class="logo-a" cx="12.5" cy="16" r="7.5"/><circle class="logo-b" cx="19.5" cy="16" r="7.5"/></svg>
+      <span>DeepChat</span>
     </div>
-
-    <div class="privacy-notice">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      <span><strong>Suas chaves ficam 100% no seu navegador.</strong> Nenhum dado é enviado para servidores próprios — as requisições vão diretamente para DeepSeek e OpenAI.</span>
-    </div>
-
-    <div class="field-group">
-      <div class="field-label">
-        <span class="label-icon deepseek-color"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12 C4 6, 8 4, 12 4 C16 4, 20 7, 22 12"/><path d="M2 12 C4 16, 8 18, 12 18"/><path d="M12 18 L14 22 L16 18"/><path d="M18 8 L20 4 L22 8"/><circle cx="8" cy="10" r="1" fill="currentColor"/></svg></span>
-        DeepSeek API Key
-      </div>
-      <div class="field-wrapper">
-        <input type="password" id="deepseekKey" placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false">
-        <button class="toggle-eye" onclick="toggleEye('deepseekKey', this)" title="Mostrar/ocultar">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <div class="field-group">
-      <div class="field-label">
-        <span class="label-icon chatgpt-color"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V5"/><circle cx="12" cy="4" r="1" fill="currentColor"/><rect x="8" y="12" width="3" height="3" rx="0.5"/><rect x="13" y="12" width="3" height="3" rx="0.5"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg></span>
-        ChatGPT (OpenAI) API Key
-      </div>
-      <div class="field-wrapper">
-        <input type="password" id="chatgptKey" placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" spellcheck="false">
-        <button class="toggle-eye" onclick="toggleEye('chatgptKey', this)" title="Mostrar/ocultar">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <label class="checkbox-row">
-      <input type="checkbox" id="saveKeys" checked>
-      <span style="display:flex;align-items:center;gap:6px">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Salvar chaves no navegador (localStorage)
-      </span>
-    </label>
-
-    <button class="instructions-toggle" id="instructionsToggle" onclick="toggleInstructions()">
-      <span style="display:flex;align-items:center;gap:6px">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        Como conseguir minhas chaves
-      </span>
-      <em class="chevron">▼</em>
-    </button>
-
-    <div class="instructions-card" id="instructionsCard">
-      <h3>DeepSeek</h3>
-      <ol>
-        <li>Acesse <strong>platform.deepseek.com</strong></li>
-        <li>Crie conta (gratuita)</li>
-        <li>Vá em <strong>"API Keys"</strong> → <strong>"Create new key"</strong></li>
-        <li>Copie a chave gerada</li>
-      </ol>
-      <h3>ChatGPT (OpenAI)</h3>
-      <ol>
-        <li>Acesse <strong>platform.openai.com</strong></li>
-        <li>Crie conta (ganha créditos grátis)</li>
-        <li>Vá em <strong>"API Keys"</strong> → <strong>"Create new secret key"</strong></li>
-        <li>Copie a chave (começa com <code>sk-</code>)</li>
-      </ol>
-      <div class="tip"><strong>DICA:</strong> DeepSeek é muito barato — ótimo para testes!</div>
-    </div>
-
-    <div class="login-error" id="loginError"></div>
-
-    <button class="btn-enter" id="btnEnter" onclick="entrarNoGrupo()" disabled>
-      <span style="display:inline-flex;align-items:center;gap:8px">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        ENTRAR NO GRUPO
-      </span>
-    </button>
-  </div>
-</div>
-
-<!-- CHAT -->
-<div id="chatScreen" class="hidden">
-  <div class="chat-wrapper">
-
-    <div class="offline-banner" id="offlineBanner">
-      ⚠ Sem conexão. Reconectando...
-    </div>
-
-    <div class="chat-header">
-      <div class="header-group-avatar">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      </div>
-      <div class="header-info">
-        <div class="group-name" id="groupName">
-          DeepChat
-          <span class="inverted-badge" id="invertedBadge" style="display:none">Invertido</span>
+    <div class="inicio-meio">
+      <h1 class="inicio-titulo" id="inicioTitulo">Uma IA responde.<br><span>Outra revisa.</span></h1>
+      <p class="inicio-texto">O DeepChat manda sua pergunta para o DeepSeek e a resposta para o ChatGPT conferir. Você recebe as duas coisas: a resposta e um veredito sobre ela, com o que está certo, o que falta e, quando precisa, a versão corrigida.</p>
+      <figure class="amostra" aria-hidden="true">
+        <div class="am-pergunta">A Muralha da China dá para ver do espaço?</div>
+        <div class="am-resposta" data-ia="deepseek">
+          <div class="am-cab"><span class="marca-ia">D</span><strong>DeepSeek</strong></div>
+          <p>Sim. É a única construção humana visível a olho nu do espaço, e pode ser vista até da Lua.</p>
         </div>
-        <div class="group-status" id="groupStatus">DeepSeek + ChatGPT Revisor</div>
-      </div>
-      <div class="header-actions">
-        <span class="model-badge" id="modelBadge" onclick="toggleModel()" title="Alternar modelo">GPT-4o-mini</span>
-        <button class="sound-toggle" id="soundToggle" onclick="toggleSound()" title="Som">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        </button>
-        <button class="menu-dots-btn" onclick="toggleMenu()" title="Menu">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-        </button>
-      </div>
-      <div class="dropdown-menu" id="dropdownMenu">
-        <button class="dropdown-item" onclick="abrirHistorico()"><span class="di-icon">🕐</span> Histórico de conversas</button>
-        <button class="dropdown-item" onclick="exportarMarkdown()"><span class="di-icon">⬇</span> Exportar como Markdown</button>
-        <button class="dropdown-item" onclick="irParaConfig()"><span class="di-icon">⚙</span> Configurações (chaves API)</button>
-        <button class="dropdown-item" id="btnInverter" onclick="inverterOrdem()"><span class="di-icon">⇄</span> Inverter ordem das IAs</button>
-        <button class="dropdown-item" onclick="novaConversa()"><span class="di-icon">+</span> Nova conversa</button>
-      </div>
+        <div class="am-revisao" data-ia="chatgpt" data-veredito="incorreta">
+          <div class="am-cab"><span class="marca-ia">G</span><strong>Revisão do ChatGPT</strong>
+            <span class="veredito"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/></svg><span>Incorreta</span></span></div>
+          <p>É um mito. A muralha é estreita e tem a cor do terreno; astronautas confirmam que não dá para vê-la a olho nu da órbita.</p>
+        </div>
+      </figure>
     </div>
+    <footer class="page-footer" aria-label="AFN Systems, DeepChat">
+      <div class="pf-marca"><span class="pf-afn">AFN</span><span class="pf-gap"></span><span class="pf-sys">SYSTEMS</span></div>
+      <span class="pf-pipe" aria-hidden="true">|</span>
+      <span class="pf-info">DeepChat</span>
+    </footer>
+  </section>
 
-    <div class="messages-area" id="messagesArea">
-      <div class="date-divider"><span>HOJE</span></div>
-    </div>
+  <section class="inicio-form" aria-labelledby="chavesTitulo">
+    <form id="formChaves" novalidate>
+      <h2 id="chavesTitulo">Conecte suas chaves</h2>
+      <p class="form-ajuda">Uma chave de cada serviço. Elas ficam só neste navegador e vão direto para as APIs, sem nenhum servidor no meio.</p>
 
-    <div id="typingArea" style="padding:0 12px;flex-shrink:0;background:var(--bg-chat);"></div>
-
-    <button class="cancel-request-btn" id="cancelBtn" onclick="cancelarRequest()">
-      ✕ Cancelar (aguardando resposta...)
-    </button>
-
-    <div class="reply-bar" id="replyBar">
-      <div class="reply-bar-content">
-        <div class="reply-bar-label" id="replyBarLabel">Respondendo</div>
-        <div class="reply-bar-text" id="replyBarText"></div>
-      </div>
-      <button class="reply-bar-close" onclick="cancelarResposta()">✕</button>
-    </div>
-
-    <div class="file-preview-bar" id="filePreviewBar">
-      <div class="file-preview-content">
-        <div class="file-preview-icon" id="filePreviewIcon"></div>
-        <div class="file-preview-info">
-          <div class="file-preview-name" id="filePreviewName"></div>
-          <div class="file-preview-size" id="filePreviewSize"></div>
+      <div class="campo">
+        <div class="campo-rotulo">
+          <label for="chaveDeepseek">Chave do DeepSeek</label>
+          <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">Criar chave<span class="sr-only"> (abre o site do DeepSeek)</span></a>
+        </div>
+        <div class="campo-senha">
+          <input id="chaveDeepseek" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="sk-…" aria-describedby="erroChaves">
+          <button type="button" class="btn-icone" data-ic="olho" data-mostrar="chaveDeepseek" aria-label="Mostrar a chave do DeepSeek" aria-pressed="false"></button>
         </div>
       </div>
-      <button class="file-preview-remove" onclick="removerAnexo()" title="Remover">✕</button>
-    </div>
 
-    <div class="input-area">
-      <div class="input-row">
-        <input type="file" id="fileInput" accept="image/*,.pdf,.txt,.md,.csv" style="display:none" onchange="onFileSelected(event)">
-        <button class="input-attach" title="Anexar" onclick="document.getElementById('fileInput').click()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-        </button>
-        <div class="input-field-wrapper">
-          <textarea class="message-input" id="messageInput" placeholder="Digite uma mensagem..." rows="1" maxlength="4000" oninput="onInputChange()" onkeydown="onKeyDown(event)"></textarea>
+      <div class="campo">
+        <div class="campo-rotulo">
+          <label for="chaveChatgpt">Chave da OpenAI (ChatGPT)</label>
+          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Criar chave<span class="sr-only"> (abre o site da OpenAI)</span></a>
         </div>
-        <button class="btn-send" id="btnSend" onclick="enviarMensagem()" disabled title="Enviar">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
+        <div class="campo-senha">
+          <input id="chaveChatgpt" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="sk-…" aria-describedby="erroChaves">
+          <button type="button" class="btn-icone" data-ic="olho" data-mostrar="chaveChatgpt" aria-label="Mostrar a chave da OpenAI" aria-pressed="false"></button>
+        </div>
       </div>
-      <div class="input-meta"><span class="char-counter" id="charCounter">0/4000</span></div>
+
+      <label class="caixa"><input type="checkbox" id="lembrarChaves" checked><span>Lembrar neste navegador</span></label>
+      <p class="form-erro" id="erroChaves" role="alert" hidden></p>
+
+      <button type="submit" class="btn btn-pri btn-largo" id="btnComecar">Começar</button>
+      <div class="ou" aria-hidden="true">ou</div>
+      <a class="btn btn-sec btn-largo" href="?demo=1">Ver como funciona, sem chaves</a>
+
+      <details class="como">
+        <summary>Quanto custa e como criar as chaves</summary>
+        <div class="como-corpo">
+          <p>As duas APIs cobram por uso, direto na sua conta de cada serviço. Uma pergunta com revisão costuma custar menos de um centavo de dólar com o GPT-4o mini.</p>
+          <ol>
+            <li>No <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">DeepSeek</a>: crie a conta, adicione créditos e gere uma chave em <em>API Keys</em>.</li>
+            <li>Na <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI</a>: crie a conta, adicione créditos em <em>Billing</em> e gere uma chave em <em>API keys</em>.</li>
+            <li>Cole as duas aqui. Para trocar depois, use <em>Chaves e preferências</em>, no menu.</li>
+          </ol>
+        </div>
+      </details>
+    </form>
+  </section>
+</div>
+
+<!-- ═══════════════════════════════ APP ══════════════════════════════════ -->
+<div class="app" id="telaApp" hidden>
+  <aside class="lateral" id="lateral" aria-label="Conversas">
+    <div class="lateral-topo">
+      <div class="logo">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle class="logo-a" cx="12.5" cy="16" r="7.5"/><circle class="logo-b" cx="19.5" cy="16" r="7.5"/></svg>
+        <span>DeepChat</span>
+      </div>
+      <button type="button" class="btn-icone so-gaveta" id="btnFecharLateral" data-ic="fechar" aria-label="Fechar a lista de conversas"></button>
+    </div>
+    <button type="button" class="btn-nova" id="btnNova"><span class="btn-nova-ic" data-ic="nova"></span><span>Nova conversa</span><kbd>Ctrl K</kbd></button>
+    <div class="busca">
+      <span class="busca-ic" data-ic="busca" aria-hidden="true"></span>
+      <input type="search" id="busca" placeholder="Buscar nas conversas" aria-label="Buscar nas conversas" autocomplete="off">
+    </div>
+    <nav class="lista" id="listaConversas" aria-label="Histórico de conversas"></nav>
+    <footer class="page-footer" aria-label="AFN Systems, DeepChat">
+      <div class="pf-marca"><span class="pf-afn">AFN</span><span class="pf-gap"></span><span class="pf-sys">SYSTEMS</span></div>
+      <span class="pf-pipe" aria-hidden="true">|</span>
+      <span class="pf-info">DeepChat</span>
+    </footer>
+  </aside>
+  <div class="veu" id="veu" hidden></div>
+
+  <main class="principal" id="principal">
+    <header class="barra">
+      <button type="button" class="btn-icone so-gaveta" id="btnLateral" data-ic="painel" aria-label="Abrir a lista de conversas" aria-controls="lateral" aria-expanded="false"></button>
+      <h1 class="barra-titulo" id="tituloConversa">Nova conversa</h1>
+      <span class="selo-demo" id="seloDemo" hidden>Demonstração</span>
+      <div class="menu-caixa">
+        <button type="button" class="btn-icone" id="btnMenu" data-ic="mais" aria-haspopup="menu" aria-expanded="false" aria-controls="menu" aria-label="Mais opções"></button>
+        <div class="menu" id="menu" role="menu" aria-label="Mais opções" hidden>
+          <button type="button" role="menuitem" data-menu="exportar" data-ic="baixar" data-precisa-conversa>Exportar em Markdown</button>
+          <button type="button" role="menuitem" data-menu="imprimir" data-ic="imprimir" data-precisa-conversa>Imprimir ou salvar PDF</button>
+          <button type="button" role="menuitem" data-menu="excluir" data-ic="lixeira" data-precisa-conversa>Excluir esta conversa</button>
+          <hr>
+          <button type="button" role="menuitem" data-menu="ajustes" data-ic="ajustes">Chaves e preferências</button>
+          <button type="button" role="menuitem" data-menu="sobre" data-ic="info">Sobre o DeepChat</button>
+          <button type="button" role="menuitem" data-menu="sair-demo" data-ic="sair" hidden>Sair da demonstração</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="faixa faixa-demo" id="faixaDemo" hidden>
+      <span class="faixa-longa">Demonstração: as respostas são exemplos gravados e nada é enviado.</span>
+      <span class="faixa-curta">Demonstração · nada é enviado</span>
+      <a href="./">Usar minhas chaves</a>
+    </div>
+    <div class="faixa faixa-offline" id="faixaOffline" role="status" hidden>
+      <span>Sem conexão. Dá para ler as conversas; para perguntar, espere a internet voltar.</span>
     </div>
 
+    <div class="impressao-cab" id="impressaoCab" aria-hidden="true"></div>
+    <div class="rolagem" id="rolagem">
+      <div class="coluna" id="conversa"></div>
+    </div>
+
+    <div class="rodape-pergunta">
+      <button type="button" class="ir-fim" id="btnIrFim" hidden><span id="irFimTexto">Ir para o fim</span></button>
+      <form class="compositor" id="compositor" autocomplete="off">
+        <div class="compositor-extra" id="extraCitacao" hidden>
+          <span class="extra-ic" data-ic="citar" aria-hidden="true"></span>
+          <span class="extra-texto"><strong id="citacaoAutor"></strong> <span id="citacaoTexto"></span></span>
+          <button type="button" class="btn-icone btn-pequeno" id="btnTirarCitacao" data-ic="fechar" aria-label="Tirar a citação"></button>
+        </div>
+        <div class="compositor-extra" id="extraAnexo" hidden>
+          <span class="extra-ic" id="anexoIcone" aria-hidden="true"></span>
+          <span class="extra-texto"><strong id="anexoNome"></strong> <span id="anexoTam"></span></span>
+          <button type="button" class="btn-icone btn-pequeno" id="btnTirarAnexo" data-ic="fechar" aria-label="Tirar o anexo"></button>
+        </div>
+        <label class="sr-only" for="pergunta">Sua pergunta</label>
+        <textarea id="pergunta" rows="1" maxlength="4000" placeholder="Pergunte qualquer coisa" aria-describedby="dicaEnvio"></textarea>
+        <div class="compositor-barra">
+          <input type="file" id="arquivo" hidden
+                 accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,.markdown,.csv,.tsv,.json,.xml,.yml,.yaml,.log,.html,.css,.js,.mjs,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.cs,.go,.rs,.php,.rb,.sql,.sh">
+          <button type="button" class="btn-icone" id="btnAnexo" data-ic="anexo" aria-label="Anexar imagem ou arquivo de texto" title="Anexar imagem ou arquivo de texto"></button>
+          <button type="button" class="ordem" id="btnOrdem" title="Trocar quem responde e quem revisa"></button>
+          <span class="contador" id="contador"></span>
+          <button type="submit" class="btn-enviar" id="btnEnviar" data-ic="enviar" aria-label="Enviar pergunta" disabled></button>
+        </div>
+      </form>
+      <p class="dica" id="dicaEnvio">Enter envia · Shift+Enter quebra a linha</p>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════ DIÁLOGOS ═════════════════════════════ -->
+<dialog class="dlg" id="dlgAjustes" aria-labelledby="ajustesTitulo">
+  <header class="dlg-cab">
+    <h2 id="ajustesTitulo">Chaves e preferências</h2>
+    <button type="button" class="btn-icone" data-fechar data-ic="fechar" aria-label="Fechar"></button>
+  </header>
+  <div class="dlg-corpo">
+    <section class="ajuste-grupo" id="grupoChaves" aria-labelledby="ajChavesTitulo">
+      <h3 id="ajChavesTitulo">Chaves de API</h3>
+      <div class="campo">
+        <label for="ajDeepseek">Chave do DeepSeek</label>
+        <div class="campo-senha">
+          <input id="ajDeepseek" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="sk-…">
+          <button type="button" class="btn-icone" data-ic="olho" data-mostrar="ajDeepseek" aria-label="Mostrar a chave do DeepSeek" aria-pressed="false"></button>
+        </div>
+      </div>
+      <div class="campo">
+        <label for="ajChatgpt">Chave da OpenAI (ChatGPT)</label>
+        <div class="campo-senha">
+          <input id="ajChatgpt" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="sk-…">
+          <button type="button" class="btn-icone" data-ic="olho" data-mostrar="ajChatgpt" aria-label="Mostrar a chave da OpenAI" aria-pressed="false"></button>
+        </div>
+      </div>
+      <label class="caixa"><input type="checkbox" id="ajLembrar"><span>Lembrar neste navegador</span></label>
+      <p class="form-erro" id="ajErroChaves" role="alert" hidden></p>
+      <div class="linha-botoes">
+        <button type="button" class="btn btn-sec" id="ajSalvarChaves">Salvar chaves</button>
+        <button type="button" class="btn btn-texto btn-texto-perigo" id="ajEsquecer">Esquecer chaves</button>
+      </div>
+    </section>
+    <section class="ajuste-grupo" id="grupoChavesDemo" aria-labelledby="ajDemoTitulo" hidden>
+      <h3 id="ajDemoTitulo">Chaves de API</h3>
+      <p class="ajuste-nota">Na demonstração não há chaves: as respostas são exemplos gravados. <a href="./">Usar minhas chaves</a></p>
+    </section>
+
+    <section class="ajuste-grupo" aria-labelledby="ajRespTitulo">
+      <h3 id="ajRespTitulo">Respostas</h3>
+      <fieldset class="opcoes">
+        <legend>Quem responde</legend>
+        <label class="opcao"><input type="radio" name="ordem" value="deepseek">
+          <span><strong>DeepSeek responde</strong><small>e o ChatGPT revisa</small></span></label>
+        <label class="opcao"><input type="radio" name="ordem" value="chatgpt">
+          <span><strong>ChatGPT responde</strong><small>e o DeepSeek revisa. Lê imagens.</small></span></label>
+      </fieldset>
+      <div class="campo">
+        <label for="ajModelo">Modelo do ChatGPT</label>
+        <select id="ajModelo"></select>
+      </div>
+    </section>
+
+    <section class="ajuste-grupo" aria-labelledby="ajAparTitulo">
+      <h3 id="ajAparTitulo">Aparência e som</h3>
+      <fieldset class="segmentado">
+        <legend>Tema</legend>
+        <label><input type="radio" name="tema" value="sistema"><span>Do sistema</span></label>
+        <label><input type="radio" name="tema" value="claro"><span>Claro</span></label>
+        <label><input type="radio" name="tema" value="escuro"><span>Escuro</span></label>
+      </fieldset>
+      <label class="caixa"><input type="checkbox" id="ajSom"><span>Tocar um som quando a revisão chegar</span></label>
+    </section>
+
+    <section class="ajuste-grupo" aria-labelledby="ajDadosTitulo">
+      <h3 id="ajDadosTitulo">Dados</h3>
+      <p class="ajuste-nota" id="ajNotaDados">As conversas ficam só neste navegador.</p>
+      <button type="button" class="btn btn-texto btn-texto-perigo" id="ajApagarHistorico">Apagar todas as conversas</button>
+    </section>
   </div>
-</div>
+</dialog>
 
-<!-- Context Menu -->
-<div class="context-menu" id="contextMenu">
-  <div class="context-item" onclick="contextResponder()">↩ Responder</div>
-  <div class="context-item" onclick="contextNovaResposta()" id="ctxNovaResposta">↺ Nova resposta</div>
-  <div class="context-item" onclick="contextCopiar()">⎘ Copiar texto</div>
-</div>
+<dialog class="dlg" id="dlgSobre" aria-labelledby="sobreTitulo">
+  <header class="dlg-cab">
+    <h2 id="sobreTitulo">Sobre o DeepChat</h2>
+    <button type="button" class="btn-icone" data-fechar data-ic="fechar" aria-label="Fechar"></button>
+  </header>
+  <div class="dlg-corpo sobre">
+    <p>O DeepChat faz cada pergunta a duas IAs. Uma responde; a outra revisa a resposta e dá um veredito (<em>correta</em>, <em>parcialmente correta</em> ou <em>incorreta</em>), com os pontos fortes, o que melhorar e, quando precisa, a versão corrigida.</p>
 
-<!-- Modal Histórico -->
-<div class="modal-overlay" id="historicoModal">
-  <div class="modal-box">
-    <div class="modal-header">
-      <span class="modal-title">Histórico de Conversas</span>
-      <button class="modal-close" onclick="fecharModal('historicoModal')">×</button>
-    </div>
-    <div class="modal-body">
-      <input type="text" class="history-search" id="historicoSearch" placeholder="Buscar nas conversas..." oninput="filtrarHistorico(this.value)">
-      <div id="historicoLista"></div>
+    <h3>Privacidade</h3>
+    <ul class="lista-simples">
+      <li>As chaves e as conversas ficam só neste navegador.</li>
+      <li>As perguntas vão direto do seu navegador para <code>api.deepseek.com</code> e <code>api.openai.com</code>. Não existe servidor do DeepChat.</li>
+      <li>Cada pergunta usa as duas APIs, e o custo cai na sua conta de cada serviço.</li>
+    </ul>
+
+    <h3>Atalhos</h3>
+    <dl class="atalhos">
+      <div><dt>Enviar</dt><dd><kbd>Enter</kbd></dd></div>
+      <div><dt>Quebrar a linha</dt><dd><kbd>Shift</kbd> <kbd>Enter</kbd></dd></div>
+      <div><dt>Nova conversa</dt><dd><kbd>Ctrl</kbd> <kbd>K</kbd></dd></div>
+      <div><dt>Parar a resposta</dt><dd><kbd>Esc</kbd></dd></div>
+    </dl>
+
+    <div class="diag" id="diag" hidden></div>
+
+    <p class="sobre-codigo">
+      <a href="https://github.com/alyssom-fernandes/DeepChat" target="_blank" rel="noopener noreferrer">Código-fonte no GitHub</a>
+      <span>JavaScript puro, sem build · Licença MIT</span>
+    </p>
+    <div class="sobre-assinatura">
+      <div class="pf-assinatura" role="img" aria-label="AFN Systems, by Alyssom Fernandes">
+        <div class="pf-marca" aria-hidden="true"><span class="pf-afn">AFN</span><span class="pf-gap"></span><span class="pf-sys">SYSTEMS</span></div>
+        <span class="pf-by" aria-hidden="true">by Alyssom Fernandes</span>
+      </div>
     </div>
   </div>
-</div>
+</dialog>
 
-<!-- Toast -->
-<div class="toast-container">
-  <div class="toast" id="repeatToast">
-    <div class="toast-text">Você já fez esta pergunta. Deseja consultar novamente?</div>
-    <div class="toast-actions">
-      <button class="toast-btn confirm" onclick="toastConfirmar()">Sim, consultar</button>
-      <button class="toast-btn cancel" onclick="toastCancelar()">Não</button>
+<dialog class="dlg dlg-pequeno" id="dlgConfirmar" aria-labelledby="confirmarTitulo" aria-describedby="confirmarTexto">
+  <form method="dialog">
+    <h2 id="confirmarTitulo"></h2>
+    <p id="confirmarTexto"></p>
+    <div class="dlg-acoes">
+      <button class="btn btn-sec" value="nao" data-cancelar>Cancelar</button>
+      <button class="btn btn-pri" value="sim" data-confirmar>Confirmar</button>
     </div>
-  </div>
-</div>
+  </form>
+</dialog>
 
-<!-- Scripts: api.js primeiro (define CONFIG e funções de API), depois app.js -->
-<script src="js/api.js"></script>
-<script src="js/app.js"></script>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<div class="sr-only" id="anuncio" aria-live="polite"></div>
 </body>
 </html>
