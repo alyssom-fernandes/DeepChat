@@ -156,8 +156,9 @@ export function exemploDaPergunta(pergunta) {
 export function esperarDemo(ms, signal) {
   return new Promise((res, rej) => {
     if (signal?.aborted) { rej(new DOMException('Cancelado', 'AbortError')); return; }
-    const t = setTimeout(res, ms);
-    signal?.addEventListener('abort', () => { clearTimeout(t); rej(new DOMException('Cancelado', 'AbortError')); }, { once: true });
+    const parar = () => { clearTimeout(t); rej(new DOMException('Cancelado', 'AbortError')); };
+    const t = setTimeout(() => { signal?.removeEventListener('abort', parar); res(); }, ms);
+    signal?.addEventListener('abort', parar, { once: true });
   });
 }
 

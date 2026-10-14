@@ -3,7 +3,7 @@
    lugares certos dos casos comuns. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { realcar, familiaDe } from '../js/realce.js';
+import { realcar, familiaDe, MAX_REALCE } from '../js/realce.js';
 import { exemploDaPergunta } from '../js/demo.js';
 
 const ENTIDADES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
@@ -78,6 +78,24 @@ test('HTML: tag, atributo e valor; o texto entre as tags fica sem cor', () => {
   assert.deepEqual(marcados(html, 'k'), ['a', 'b', 'b', 'a']);
   assert.deepEqual(marcados(html, 'p'), ['href', 'class']);
   assert.ok(!marcados(html, 's').includes('"aspas"'), 'aspas no texto não viram valor');
+});
+
+test('entradas longas e malformadas não travam (tempo linear, e acima do limite só escapa)', () => {
+  const n = MAX_REALCE - 10;
+  const casos = [
+    ['js', '1'.repeat(n) + 'a'], ['js', '/['.repeat(n / 2)], ['css', 'a'.repeat(n)], ['css', 'a:'.repeat(n / 2) + '{'],
+    ['yaml', '-'.repeat(n)], ['yaml', '1'.repeat(n) + 'x'], ['sql', '1'.repeat(n) + 'x'], ['sh', 'echo ' + '1'.repeat(n - 10) + 'abc'],
+    ['python', '"""' + 'x'.repeat(n)], ['html', '<a ' + 'b'.repeat(n)], ['js', '/*' + '*'.repeat(n)],
+  ];
+  for (const [lingua, codigo] of casos) {
+    const inicio = performance.now();
+    const html = realcar(codigo, lingua);
+    const ms = performance.now() - inicio;
+    assert.ok(ms < 1000, `${lingua} levou ${Math.round(ms)} ms`);
+    assert.equal(texto(html), codigo, lingua);
+  }
+  const grande = 'const x = 1;\n'.repeat(MAX_REALCE / 10);
+  assert.equal(realcar(grande, 'js'), grande.replace(/&/g, '&amp;'), 'acima do limite, sem cor');
 });
 
 test('linguagem desconhecida ou sem nome: só escapa', () => {

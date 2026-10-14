@@ -20,7 +20,8 @@ export const CONFIG = {
     { id: 'gpt-4o',      nome: 'GPT-4o',      detalhe: 'mais caprichado' },
   ],
   MAX_CONTEXTO:    10,
-  TIMEOUT_MS:      60_000,
+  TIMEOUT_MS:      60_000,    // sem receber nada
+  TEMPO_TOTAL_MS:  300_000,   // teto de uma chamada, mesmo recebendo (": keep-alive" sem fim)
   MAX_TENTATIVAS:  3,
   ESPERA_BASE_MS:  1_000,
   CIRCUITO_MS:     30_000,
@@ -65,8 +66,9 @@ export class RequestChain {
 // ── Núcleo ────────────────────────────────────────────────────────────────────
 
 const dormir = (ms, signal) => new Promise((res, rej) => {
-  const t = setTimeout(res, ms);
-  signal?.addEventListener('abort', () => { clearTimeout(t); rej(new DOMException('Cancelado', 'AbortError')); }, { once: true });
+  const parar = () => { clearTimeout(t); rej(new DOMException('Cancelado', 'AbortError')); };
+  const t = setTimeout(() => { signal?.removeEventListener('abort', parar); res(); }, ms);
+  signal?.addEventListener('abort', parar, { once: true });
 });
 
 const transitorio = e => e instanceof ErroApi && ['tempo', 'rede', 'servidor'].includes(e.tipo);
@@ -77,45 +79,49 @@ const transitorio = e => e instanceof ErroApi && ['tempo', 'rede', 'servidor'].i
  * rede cortam linhas ao meio; o leitor guarda o resto até a linha fechar.
  * Função pura, testada em tests/api.test.mjs.
  * @returns {{ler: (pedaco: string) => object[], fechar: () => object[]}}
- *   cada evento é {texto} (um pedaço da resposta), {fim: true} ou {erro}.
+ *   eventos: {texto} (um pedaço da resposta), {fim: true} ("[DONE]" ou o
+ *   motivo de parada, finish_reason) ou {erro}.
  */
 export function criarLeitorSSE() {
   let resto = '';
-  const evento = linha => {
-    if (!linha.startsWith('data:')) return null;   // linha vazia, ": keep-alive", event:, id:
+  const eventos = linha => {
+    if (!linha.startsWith('data:')) return [];   // linha vazia, ": keep-alive", event:, id:
     const dado = linha.slice(5).trim();
-    if (dado === '[DONE]') return { fim: true };
+    if (dado === '[DONE]') return [{ fim: true }];
     let j;
-    try { j = JSON.parse(dado); } catch { return null; }
-    if (j?.error) return { erro: String(j.error.message || 'Erro no meio da resposta') };
-    const texto = j?.choices?.[0]?.delta?.content;
-    return typeof texto === 'string' && texto ? { texto } : null;
+    try { j = JSON.parse(dado); } catch { return []; }
+    if (j?.error) return [{ erro: String(j.error.message || 'Erro no meio da resposta') }];
+    const escolha = j?.choices?.[0];
+    const texto = escolha?.delta?.content;
+    return [typeof texto === 'string' && texto ? { texto } : null, escolha?.finish_reason ? { fim: true } : null].filter(Boolean);
   };
   return {
     ler(pedaco) {
       const linhas = (resto + pedaco).split(/\r?\n/);
       resto = linhas.pop();
-      return linhas.map(evento).filter(Boolean);
+      return linhas.flatMap(eventos);
     },
     fechar() {
-      const ultimo = resto ? evento(resto) : null;
+      const ultimos = resto ? eventos(resto) : [];
       resto = '';
-      return ultimo ? [ultimo] : [];
+      return ultimos;
     },
   };
 }
 
 async function chamar(ia, corpo, chaveApi, signal, aoParcial) {
   const limite = new AbortController();
-  // o prazo conta o tempo sem receber nada: cada pedaço que chega renova
+  // o prazo conta o tempo sem receber nada (cada pedaço renova), com um teto total
   let timer;
   const armar = () => { clearTimeout(timer); timer = setTimeout(() => limite.abort(), CONFIG.TIMEOUT_MS); };
   armar();
+  const teto = setTimeout(() => limite.abort(), CONFIG.TEMPO_TOTAL_MS);
   // Junta o Parar do usuário e o tempo limite. Sem AbortSignal.any (Safari < 17.4),
   // liga à mão: o Parar também aborta o controlador do tempo limite.
   let sinal = limite.signal;
+  const pararLimite = () => limite.abort();
   if (signal && AbortSignal.any) sinal = AbortSignal.any([signal, limite.signal]);
-  else if (signal) signal.addEventListener('abort', () => limite.abort(), { once: true });
+  else if (signal) signal.addEventListener('abort', pararLimite, { once: true });
   const falhaDeRede = (e, parcial = '') => {
     if (signal?.aborted) return e;
     if (limite.signal.aborted) return new ErroApi('tempo', 'Tempo esgotado', { parcial });
@@ -133,6 +139,7 @@ async function chamar(ia, corpo, chaveApi, signal, aoParcial) {
     } catch (e) {
       throw falhaDeRede(e);
     }
+    armar();   // os cabeçalhos chegaram: o prazo recomeça para o corpo
     if (!resp.ok) {
       const j = await resp.json().catch(() => ({}));
       const msg = j?.error?.message || `HTTP ${resp.status}`;
@@ -154,26 +161,36 @@ async function chamar(ia, corpo, chaveApi, signal, aoParcial) {
     const leitor = criarLeitorSSE();
     const decodificador = new TextDecoder();
     const corrente = resp.body.getReader();
-    let texto = '';
+    let texto = '', terminou = false;
     const usar = eventos => {
       for (const ev of eventos) {
         if (ev.erro) throw new ErroApi('servidor', ev.erro, { parcial: texto });
+        if (ev.fim) terminou = true;
         if (ev.texto) { texto += ev.texto; aoParcial?.(texto); }
       }
     };
-    for (;;) {
-      let pedaco;
-      try { pedaco = await corrente.read(); } catch (e) { throw falhaDeRede(e, texto); }
-      if (pedaco.done) break;
-      armar();
-      usar(leitor.ler(decodificador.decode(pedaco.value, { stream: true })));
+    try {
+      for (;;) {
+        let pedaco;
+        try { pedaco = await corrente.read(); } catch (e) { throw falhaDeRede(e, texto); }
+        if (pedaco.done) break;
+        armar();
+        usar(leitor.ler(decodificador.decode(pedaco.value, { stream: true })));
+      }
+      usar(leitor.ler(decodificador.decode()));
+      usar(leitor.fechar());
+    } catch (e) {
+      corrente.cancel().catch(() => {});   // não deixa a conexão pendurada
+      throw e;
     }
-    usar(leitor.ler(decodificador.decode()));
-    usar(leitor.fechar());
     if (!texto.trim()) throw new ErroApi('servidor', 'Resposta vazia');
+    // sem "[DONE]" nem motivo de parada, a conexão fechou antes do fim
+    if (!terminou) throw new ErroApi('rede', 'A conexão terminou antes do fim da resposta', { parcial: texto });
     return texto;
   } finally {
     clearTimeout(timer);
+    clearTimeout(teto);
+    signal?.removeEventListener('abort', pararLimite);
   }
 }
 

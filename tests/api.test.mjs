@@ -80,6 +80,30 @@ test('consultar: falha antes do primeiro pedaço tenta de novo; depois, não', a
   assert.equal(chamadas.length, 1, 'sem nova tentativa: o começo já estava na tela');
 });
 
+test('consultar: o fluxo que fecha sem [DONE] nem motivo de parada é resposta cortada', async () => {
+  fetchFalso([() => sse([evento('metade da '), evento('resposta')])]);   // fecha sem [DONE]
+  const erro = await consultar(outraIA(), [], { chave: 'k' }).catch(e => e);
+  assert.equal(erro.tipo, 'rede');
+  assert.equal(erro.parcial, 'metade da resposta');
+  assert.equal(chamadas.length, 1);
+
+  const fimPeloMotivo = `data: ${JSON.stringify({ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] })}\n\n`;
+  fetchFalso([() => sse([fimPeloMotivo])]);
+  assert.equal(await consultar(outraIA(), [], { chave: 'k' }), 'ok', 'finish_reason também marca o fim');
+});
+
+test('consultar: erro no meio do fluxo cancela a conexão em vez de deixá-la aberta', async () => {
+  let cancelados = 0;
+  fetchFalso([() => new Response(new ReadableStream({
+    start(c) { c.enqueue(new TextEncoder().encode(evento('parte') + 'data: {"error":{"message":"sobrecarga"}}\n\n')); },
+    cancel() { cancelados++; },   // continua aberto: só fecha se o cliente cancelar
+  }), { headers: { 'content-type': 'text/event-stream' } })]);
+  const erro = await consultar(outraIA(), [], { chave: 'k' }).catch(e => e);
+  assert.equal(erro.tipo, 'servidor');
+  assert.equal(erro.parcial, 'parte');
+  assert.equal(cancelados, 1);
+});
+
 test('consultar: erros HTTP viram tipos que a tela explica', async () => {
   const http = (status, msg) => new Response(JSON.stringify({ error: { message: msg } }), { status, headers: { 'content-type': 'application/json' } });
   fetchFalso([http(401, 'Incorrect API key')]);

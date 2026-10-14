@@ -46,7 +46,8 @@ const R = {
   crase:       /`(?:\\[\s\S]|[^\\`])*`?/y,
   numero:      /(?:0[xX][\da-fA-F_]+|0[bB][01_]+|\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?[nfFdDlLuU]?)(?![\w$])/y,
   ident:       /[A-Za-z_$][\w$]*/y,
-  regex:       /\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/[dgimsuyv]*/y,
+  // com limite de tamanho: sem ele, uma linha longa cheia de "/" e "[" fica quadrática
+  regex:       /\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n]){0,200}\]|[^/\\\n[]){1,400}\/[dgimsuyv]*/y,
   textoPy:     /(?:[rRbBuUfF]{1,2})?(?:"""[\s\S]*?(?:"""|$)|'''[\s\S]*?(?:'''|$)|"(?:\\.|[^\\"\n])*"?|'(?:\\.|[^\\'\n])*'?)/y,
   decorador:   /@[\w.]+/y,
   preproc:     /#\s*[a-z]+/y,
@@ -54,11 +55,13 @@ const R = {
 };
 
 /**
- * Leitor genérico: a cada posição tenta as regras em ordem; sem regra, o
- * caractere passa sem cor. `regexDepois` decide se uma "/" abre uma regex (JS).
+ * Leitor genérico: a cada posição tenta as regras em ordem. Sem regra, passa
+ * sem cor a palavra inteira (`palavra`) ou um caractere: de um caractere por
+ * vez, "1111…1a" faria cada regra varrer o resto da linha, de novo e de novo.
+ * `podeRegex` decide se uma "/" abre uma regex (JS).
  */
 function varrer(codigo, familia) {
-  const { regras, palavras, maiusculas = false } = familia;
+  const { regras, palavras, maiusculas = false, palavra = /[\w$]+/y } = familia;
   let html = '', simples = '', i = 0;
   let podeRegex = true;          // JS: depois de operador ou no começo, "/" abre regex
   const soltar = () => { if (simples) { html += esc(simples); simples = ''; } };
@@ -90,9 +93,11 @@ function varrer(codigo, familia) {
       break;
     }
     if (casou) continue;
-    const ch = codigo[i++];
-    simples += ch;
-    if (!/\s/.test(ch)) podeRegex = !/[)\]}]/.test(ch);
+    palavra.lastIndex = i;
+    const sem = palavra.exec(codigo)?.[0] || codigo[i];
+    simples += sem;
+    i += sem.length;
+    if (!/^\s$/.test(sem)) podeRegex = !/[)\]}\w$]$/.test(sem);
   }
   soltar();
   return html;
@@ -136,15 +141,16 @@ const FAMILIAS = {
              [R.ident, 'ident']],
   },
   yaml: {
-    palavras: new Set(),
+    palavras: new Set(), palavra: /[\w.-]+/y,
     regras: [[R.linhaHash, 'c', inicioDeLinhaOuEspaco], [R.aspas, textoOuChave],
              [/[\w.-]+(?=\s*:(?:\s|$))/y, 'p'], [/-?\d+(?:\.\d+)?(?![\w.])/y, 'n'], [R.ident, 'ident']],
   },
   css: {
-    palavras: new Set(),
+    // propriedade: palavra seguida de ":" sem "{" logo adiante (assim "a:hover {" fica de fora)
+    palavras: new Set(), palavra: /[\w-]+/y,
     regras: [[R.bloco, 'c'], [R.aspas, 's'], [/@[\w-]+/y, 'k'], [/#[\da-fA-F]{3,8}(?![\w-])/y, 'n'],
-             [/-?(?:\d*\.)?\d+(?:%|[a-zA-Z]+)?/y, 'n'], [/--?[A-Za-z][\w-]*(?=\s*:[^{\n]*(?:;|\n|$))/y, 'p'],
-             [/[A-Za-z][\w-]*(?=\s*:[^{\n]*(?:;|\n|$))/y, 'p'], [/[A-Za-z_-][\w-]*(?=\()/y, 'f']],
+             [/-?(?:\d*\.)?\d+(?:%|[a-zA-Z]+)?/y, 'n'], [/--?[A-Za-z][\w-]*(?=\s*:(?![^{;\n]{0,300}\{))/y, 'p'],
+             [/[A-Za-z][\w-]*(?=\s*:(?![^{;\n]{0,300}\{))/y, 'p'], [/[A-Za-z_-][\w-]*(?=\()/y, 'f']],
   },
 };
 
@@ -182,14 +188,17 @@ const APELIDOS = {
 /** Família reconhecida para o nome da linguagem do bloco, ou null. */
 export const familiaDe = lingua => APELIDOS[String(lingua ?? '').toLowerCase()] ?? null;
 
+/** Acima disto, o bloco só é escapado: a tela redesenha a cada pedaço do stream. */
+export const MAX_REALCE = 20_000;
+
 /**
- * Código → HTML com cores. Linguagem desconhecida: só escapa.
+ * Código → HTML com cores. Linguagem desconhecida ou bloco muito grande: só escapa.
  * @param {string} codigo
  * @param {string} lingua nome que veio no bloco (```js, ```python…)
  */
 export function realcar(codigo, lingua) {
   const texto = String(codigo ?? '');
   const familia = familiaDe(lingua);
-  if (!familia) return esc(texto);
+  if (!familia || texto.length > MAX_REALCE) return esc(texto);
   return familia === 'html' ? varrerHtml(texto) : varrer(texto, FAMILIAS[familia]);
 }
