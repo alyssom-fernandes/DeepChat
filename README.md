@@ -63,7 +63,15 @@ Taken from the demo mode.
   a different take and reviews it again.
 - **Citar** (Quote) brings a passage of any answer or review into the next
   question, and the passage is sent to the AI too.
-- You can stop at any time, with the button or Esc.
+- The answer shows up word by word, and so does the review: the verdict
+  appears as soon as its first line arrives. Meanwhile, the question box
+  shows who is working and for how long.
+- The reviewed answer gets a line in the margin in the verdict's color,
+  like a proofreader's mark.
+- You can stop at any time, with the button or Esc. Whatever already
+  arrived stays in the conversation, marked, and is not reviewed.
+- Code blocks are colored (JavaScript, TypeScript, Python, SQL, shell,
+  JSON, YAML, CSS, HTML and the C family) and have a copy button.
 
 ### Attachments
 
@@ -83,8 +91,12 @@ Taken from the demo mode.
 - If only the review fails, the answer stays, and the notice offers
   **Revisar agora** (Review now).
 - Network failures, timeouts and 5xx errors get up to three attempts, with
-  growing waits. When three questions in a row fail on the same API, the
-  app waits 30 s before calling it again.
+  growing waits, as long as no text has arrived. If the connection drops in
+  the middle of an answer, what arrived stays, and the notice offers
+  **Tentar de novo** (Try again). When three questions in a row fail on the
+  same API, the app waits 30 s before calling it again.
+- The timeout is 60 s without receiving anything; each piece that arrives
+  resets it.
 - An unexpected failure is logged in the browser and shows up in
   **Sobre › Diagnóstico** (About › Diagnostics), ready to copy.
 
@@ -128,10 +140,10 @@ Taken from the demo mode.
   allowed only to the two APIs. `marked` and DOMPurify are pinned and loaded
   with Subresource Integrity (SRI). The 404 page allows its inline script
   and style by hash, and a test checks those hashes.
-- **What else the page loads.** The fonts come from Google Fonts and the two
-  Markdown libraries from jsDelivr: those services see the visitor's IP
-  address, never the conversations. No request sends the page address
-  (`Referer`), not even to the APIs.
+- **What else the page loads.** Only the two Markdown libraries, from
+  jsDelivr, which sees the visitor's IP address, never the conversations.
+  The fonts are served by the site itself. No request sends the page
+  address (`Referer`), not even to the APIs.
 - **Inside another site.** In an iframe, DeepChat does not ask for or open
   the keys (GitHub Pages cannot send the header that blocks framing); it
   offers to open in its own tab. The demo, which has no keys, still opens.
@@ -142,9 +154,10 @@ Taken from the demo mode.
 |---|---|
 | Interface | HTML, CSS and JavaScript ES modules, no framework and no build |
 | Markdown | marked 9 and DOMPurify 3, from jsDelivr, with SRI |
-| APIs | `fetch` straight to DeepSeek (`deepseek-chat`) and OpenAI (GPT-4o mini or GPT-4o) |
+| APIs | streaming `fetch` (Server-Sent Events) straight to DeepSeek (`deepseek-chat`) and OpenAI (GPT-4o mini or GPT-4o) |
+| Code colors | `js/realce.js`, no library |
 | Data | `localStorage` for history and preferences; WebCrypto for the keys |
-| Fonts | Instrument Sans for the interface; JetBrains Mono for code and the signature (Google Fonts) |
+| Fonts | Instrument Sans for the interface; JetBrains Mono for code and the signature, served by the site itself (OFL license) |
 | Tests | `node --test`, no dependencies, on every push (GitHub Actions) |
 
 Some decisions behind it:
@@ -163,19 +176,25 @@ Some decisions behind it:
 - **The parts that decide what shows up are pure, tested functions**:
   review parsing (new and old format), history migration, the context sent
   to the APIs, Markdown export, search, dates and text helpers.
+- **Streaming is tested without a network.** A fake `fetch` delivers the
+  answer in pieces, drops the connection midway and answers with errors;
+  the tests check the assembled text, and when a retry happens and when it
+  does not.
+- **Code colors without a library.** A small reader per language family,
+  instead of one more outside script in the CSP. The tests check that the
+  code on screen is identical to what the AI sent and that none of it
+  becomes HTML.
 
 ## Known limitations
 
 - You need an API key for each service, with credits. Without them, only
   the demo works.
-- Answers arrive whole, not word by word. A question with its review
-  usually takes 5 to 30 seconds.
 - DeepSeek cannot read images. PDFs are not accepted: for a PDF, copy its
   text into a TXT file.
 - History stays in this browser only. Clearing the site's data erases it;
   to keep a conversation, export it as Markdown.
-- `marked`, DOMPurify and the fonts come from CDNs. Without them, Markdown
-  falls back to a simple, safe format, and the fonts to the system ones.
+- `marked` and DOMPurify come from a CDN. Without them, Markdown falls back
+  to a simple, safe format.
 - The interface is in Portuguese only.
 
 ## Running your own copy
@@ -206,14 +225,16 @@ js/
   boot.js             theme before the page shows up, and the failure log
   app.js              question → answer → review flow, events and dialogs
   ui.js               messages, review, notices, history and toasts
-  api-client.js       API calls: retries, timeout, circuit breaker, attachments
+  api-client.js       API calls: streaming, retries, timeout, circuit breaker, attachments
+  realce.js           colors for code blocks
   revisao.js          prompts and review parsing (verdict and sections)
   conversa.js         conversation model, migration, context and export
   storage.js          encrypted keys, preferences and history
   state.js            session state
   texto.js            text, dates and sizes
   demo.js             demo conversations
-tests/                tests for the pure functions
+fonts/                Instrument Sans and JetBrains Mono, with their OFL licenses
+tests/                tests for the pure functions, streaming (fake fetch) and the CSP
 .github/workflows/    runs the tests on every push
 docs/telas/           images for this README and the link preview (og.png)
 ```

@@ -60,7 +60,15 @@ Capturadas do modo demonstração.
   revisa de novo.
 - **Citar** leva um trecho de qualquer resposta ou revisão para a próxima
   pergunta, e o trecho vai junto para a IA.
-- Dá para parar a qualquer momento, pelo botão ou com Esc.
+- A resposta aparece palavra por palavra, e a revisão também: o veredito
+  surge assim que a primeira linha dela chega. Enquanto isso, a caixa de
+  pergunta mostra quem está trabalhando e há quanto tempo.
+- A resposta revisada ganha na margem um traço na cor do veredito, como a
+  marca de um revisor.
+- Dá para parar a qualquer momento, pelo botão ou com Esc. O que já tinha
+  chegado fica na conversa, marcado, e não vai para a revisão.
+- Blocos de código com cores (JavaScript, TypeScript, Python, SQL, shell,
+  JSON, YAML, CSS, HTML e a família do C) e botão de copiar.
 
 ### Anexos
 
@@ -80,8 +88,12 @@ Capturadas do modo demonstração.
 - Se só a revisão falhar, a resposta fica, e o aviso oferece **Revisar
   agora**.
 - Falha de rede, tempo esgotado e erro 5xx têm até três tentativas, com
-  espera crescente. Quando três perguntas seguidas falham na mesma API, o
-  app espera 30 s antes de insistir nela.
+  espera crescente, enquanto nenhum texto chegou. Se a conexão cai no meio
+  da resposta, o que chegou fica, e o aviso oferece **Tentar de novo**.
+  Quando três perguntas seguidas falham na mesma API, o app espera 30 s
+  antes de insistir nela.
+- O tempo limite é de 60 s sem receber nada; cada pedaço que chega renova
+  o prazo.
 - Uma falha inesperada fica registrada no navegador e aparece em
   **Sobre › Diagnóstico**, pronta para copiar.
 
@@ -122,10 +134,10 @@ Capturadas do modo demonstração.
   só para as duas APIs. O `marked` e o DOMPurify vêm com versão fixa e
   conferência de integridade (SRI). A página 404 libera o script e o estilo
   dela pelo hash, e um teste confere esses hashes.
-- **O que mais a página carrega.** As fontes vêm do Google Fonts, e as duas
-  bibliotecas de Markdown, do jsDelivr: esses serviços veem o endereço IP de
-  quem abre a página, nunca as conversas. Nenhum pedido manda o endereço da
-  página (`Referer`), nem às APIs.
+- **O que mais a página carrega.** Só as duas bibliotecas de Markdown, do
+  jsDelivr, que vê o endereço IP de quem abre a página, nunca as conversas.
+  As fontes são servidas pelo próprio site. Nenhum pedido manda o endereço
+  da página (`Referer`), nem às APIs.
 - **Dentro de outro site.** Num iframe, o DeepChat não pede nem abre as
   chaves (o GitHub Pages não manda o cabeçalho que impede isso) e oferece
   abrir numa aba própria. A demonstração, que não tem chaves, abre.
@@ -136,9 +148,10 @@ Capturadas do modo demonstração.
 |---|---|
 | Interface | HTML, CSS e JavaScript em módulos ES, sem framework e sem build |
 | Markdown | marked 9 e DOMPurify 3, pelo jsDelivr, com SRI |
-| APIs | `fetch` direto para DeepSeek (`deepseek-chat`) e OpenAI (GPT-4o mini ou GPT-4o) |
+| APIs | `fetch` com stream (Server-Sent Events) direto para DeepSeek (`deepseek-chat`) e OpenAI (GPT-4o mini ou GPT-4o) |
+| Código colorido | `js/realce.js`, sem biblioteca |
 | Dados | `localStorage` para histórico e preferências; WebCrypto para as chaves |
-| Fontes | Instrument Sans na interface; JetBrains Mono no código e na assinatura (Google Fonts) |
+| Fontes | Instrument Sans na interface; JetBrains Mono no código e na assinatura, servidas pelo próprio site (licença OFL) |
 | Testes | `node --test`, sem dependências, rodando a cada envio (GitHub Actions) |
 
 Algumas decisões por trás dele:
@@ -157,19 +170,23 @@ Algumas decisões por trás dele:
 - **As partes que decidem o que aparece são funções puras e testadas**:
   leitura da revisão (formato novo e antigo), migração do histórico,
   contexto enviado às APIs, exportação em Markdown, busca, datas e textos.
+- **O stream é testado sem rede.** Um `fetch` falso entrega a resposta aos
+  pedaços, corta a conexão no meio e responde com erro; os testes conferem
+  o texto montado, quando há nova tentativa e quando não há.
+- **Cores no código sem biblioteca.** Um leitor pequeno por família de
+  linguagem, em vez de mais um script de fora na CSP. Os testes conferem que
+  o código na tela é idêntico ao que a IA mandou e que nada dele vira HTML.
 
 ## Limitações conhecidas
 
 - É preciso ter uma chave de API de cada serviço, com créditos. Sem elas,
   só a demonstração funciona.
-- As respostas chegam inteiras, não palavra por palavra. Uma pergunta com
-  revisão costuma levar de 5 a 30 segundos.
 - O DeepSeek não lê imagens. PDF não é aceito: para um PDF, copie o texto
   para um arquivo TXT.
 - O histórico fica só neste navegador. Limpar os dados do site apaga as
   conversas; para guardar uma, exporte em Markdown.
-- O `marked`, o DOMPurify e as fontes vêm de CDN. Sem eles, o Markdown cai
-  num formato simples e seguro, e as fontes, nas do sistema.
+- O `marked` e o DOMPurify vêm de CDN. Sem eles, o Markdown cai num formato
+  simples e seguro.
 - A interface é só em português.
 
 ## Como usar a sua cópia
@@ -200,14 +217,16 @@ js/
   boot.js             tema antes da página aparecer e registro de falhas
   app.js              fluxo pergunta → resposta → revisão, eventos e diálogos
   ui.js               mensagens, revisão, avisos, histórico e toasts
-  api-client.js       chamadas às APIs: tentativas, tempo limite, circuit breaker, anexos
+  api-client.js       chamadas às APIs: stream, tentativas, tempo limite, circuit breaker, anexos
+  realce.js           cores nos blocos de código
   revisao.js          prompts e leitura da revisão (veredito e seções)
   conversa.js         modelo da conversa, migração, contexto e exportação
   storage.js          chaves cifradas, preferências e histórico
   state.js            estado da sessão
   texto.js            texto, datas e tamanhos
   demo.js             conversas da demonstração
-tests/                testes das funções puras
+fonts/                Instrument Sans e JetBrains Mono, com as licenças OFL
+tests/                testes das funções puras, do stream (fetch falso) e da CSP
 .github/workflows/    roda os testes a cada envio
 docs/telas/           imagens deste README e a prévia de link (og.png)
 ```
