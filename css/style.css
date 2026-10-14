@@ -63,7 +63,8 @@
   --ds-fundo: rgba(142, 162, 255, .14);
   --gpt: #45d3a2;
   --gpt-fundo: rgba(69, 211, 162, .13);
-  --ok: #52d69a;       --ok-fundo: rgba(82, 214, 154, .12);
+  /* o verde do Correta puxa para o amarelo: não se confunde com o verde do ChatGPT */
+  --ok: #8bd36a;       --ok-fundo: rgba(139, 211, 106, .12);
   --parcial: #f2b544;  --parcial-fundo: rgba(242, 181, 68, .13);
   --erro: #ff8a84;     --erro-fundo: rgba(255, 138, 132, .10);
   --foco: #8ea2ff;
@@ -72,9 +73,11 @@
   --rev: #19191c;
   --veu: rgba(8, 8, 10, .62);
   --sombra: 0 16px 40px rgba(0, 0, 0, .5), 0 2px 8px rgba(0, 0, 0, .3);
-  --pf-afn: #c44a5a;
-  --pf-sys: rgba(255, 255, 255, .32);
+  /* assinatura AFN, guia da marca v2: 4,5:1 nos fundos escuros (antes #c44a5a e 32%) */
+  --pf-afn: #d65f70;
+  --pf-sys: rgba(255, 255, 255, .5);
   /* código: cores mais quietas que as do veredito, que continuam as mais fortes da tela */
+  --rolagem-sombra: rgba(255, 255, 255, .18);
   --tk-k: #c4a2ff;   /* palavra-chave */
   --tk-s: #e0bf8f;   /* texto */
   --tk-n: #79c9d8;   /* número e literal */
@@ -100,7 +103,7 @@
   --ds-fundo: rgba(54, 81, 212, .09);
   --gpt: #08795a;
   --gpt-fundo: rgba(8, 121, 90, .09);
-  --ok: #0f7046;       --ok-fundo: #e8f6ee;   /* 4,5:1 também sobre o cabeçalho tingido */
+  --ok: #2f7a1f;       --ok-fundo: #edf6e8;   /* 4,7:1 também sobre o cabeçalho tingido */
   --parcial: #9a5800;  --parcial-fundo: #fcf1dd;
   --erro: #c4302b;     --erro-fundo: #fdeeed;
   --foco: #3651d4;
@@ -111,6 +114,7 @@
   --sombra: 0 16px 40px rgba(24, 24, 32, .14), 0 2px 6px rgba(24, 24, 32, .06);
   --pf-afn: #6b1f2a;
   --pf-sys: #505050;
+  --rolagem-sombra: rgba(24, 24, 32, .2);
   --tk-k: #6f35c2;
   --tk-s: #8a5412;
   --tk-n: #0a6a80;
@@ -332,7 +336,8 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 .am-revisao  { animation-delay: 1.05s; }
 .am-revisao .veredito { animation: carimbo .42s 1.6s cubic-bezier(.3, 1.35, .5, 1) both; }
 .am-resposta::before { animation: tracar .6s 1.75s cubic-bezier(.2, .7, .2, 1) both; }
-.inicio-demo { display: none; }
+/* a demonstração é a ação principal de quem chega pelo portfólio */
+.inicio-demo { align-self: flex-start; margin-top: 28px; height: 46px; padding: 0 20px; font-size: 15px; }
 
 .inicio-form {
   display: flex; align-items: center; justify-content: center;
@@ -343,8 +348,6 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 .form-ajuda { color: var(--texto-2); font-size: 14px; margin-bottom: 24px; }
 #formChaves .caixa { margin: -4px 0 12px; }
 #btnComecar { margin-top: 6px; }
-.ou { display: flex; align-items: center; gap: 12px; margin: 14px 0; color: var(--texto-3); font-size: 13px; }
-.ou::before, .ou::after { content: ''; flex: 1; border-top: 1px solid var(--borda); }
 .como { margin-top: 24px; border-top: 1px solid var(--borda); padding-top: 14px; font-size: 14px; }
 .como summary { cursor: pointer; color: var(--texto-2); font-weight: 500; list-style: none; display: flex; align-items: center; gap: 8px; min-height: 32px; }
 .como summary::-webkit-details-marker { display: none; }
@@ -584,6 +587,17 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
   font: 500 12px/1 var(--mono); color: var(--texto-3);
 }
 .md pre { margin: 0; padding: 14px 16px; overflow-x: auto; font: 13px/1.65 var(--mono); tab-size: 2; }
+/* Código mais largo que o bloco: uma sombra suave na borda que ainda tem código avisa
+   que dá para rolar para o lado. As capas (local) andam com o texto e escondem a
+   sombra (scroll) quando a borda chega ao fim; sem rolagem, nada aparece. */
+.md pre {
+  background:
+    linear-gradient(to right, var(--codigo) 40%, transparent) left / 32px 100% no-repeat local,
+    linear-gradient(to left, var(--codigo) 40%, transparent) right / 32px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--rolagem-sombra), transparent) left / 16px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--rolagem-sombra), transparent) right / 16px 100% no-repeat scroll,
+    var(--codigo);
+}
 .md code, .md pre { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'calt' 0; }
 .md pre code { font: inherit; }
 /* cores do código (js/realce.js) */
@@ -857,9 +871,8 @@ legend { padding: 0; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
   .inicio-titulo { order: 2; padding: 26px 20px 0; margin-bottom: 12px; font-size: clamp(34px, 9.5vw, 44px); }
   .inicio-texto { order: 3; padding: 0 20px; font-size: 16px; margin-bottom: 22px; }
   .amostra { order: 4; padding: 0 20px 20px; max-width: none; }
-  .inicio-demo { order: 5; display: inline-flex; width: auto; margin: 0 20px; }
+  .inicio-demo { order: 5; align-self: stretch; margin: 0 20px; }
   .inicio-form { order: 6; padding: 28px 20px 32px; background: none; border: 0; justify-content: flex-start; }
-  .form-demo { display: none; }
   .inicio-apresenta .page-footer { order: 7; margin: 0; padding: 16px 20px max(16px, env(safe-area-inset-bottom)); justify-content: center; border-top-color: var(--borda); }
   #formChaves { max-width: none; }
   #formChaves h2 { font-size: 19px; }
@@ -947,7 +960,7 @@ legend { padding: 0; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
     --fundo: #fff; --fundo-2: #f5f5f5; --sup: #fff; --sup-2: #f2f2f2; --sup-3: #e8e8e8; --rev: #fff;
     --borda: #d4d4d8; --borda-2: #c4c4cc; --texto: #000; --texto-2: #3f3f46; --texto-3: #52525b;
     --balao: #f2f2f4; --codigo: #f7f7f8;
-    --ds: #2f47b8; --gpt: #066b4f; --ok: #0f6b41; --parcial: #8a4f00; --erro: #a8251f;
+    --ds: #2f47b8; --gpt: #066b4f; --ok: #2f7a1f; --parcial: #8a4f00; --erro: #a8251f;
     --tk-k: #5f2aa8; --tk-s: #7a4a10; --tk-n: #0a5e70; --tk-p: #93285c; --tk-c: #52525b;
     --ok-fundo: #fff; --parcial-fundo: #fff; --erro-fundo: #fff;
   }
