@@ -7,7 +7,8 @@
  * Mensagem: { id, turno, papel: 'pergunta'|'resposta'|'revisao',
  *             autor: 'usuario'|'deepseek'|'chatgpt', texto, em (ISO),
  *             citacao?: {autor, texto}, anexo?: {nome, tamanho, tipo},
- *             modelo?: string }
+ *             modelo?: string, interrompida?: true }
+ * `interrompida`: resposta que parou no meio (o usuário parou ou a conexão caiu).
  * `turno` é o id da pergunta: a resposta e a revisão apontam para ela.
  */
 
@@ -120,7 +121,7 @@ export function markdownDaConversa(conversa, agora = new Date()) {
       if (m.anexo?.nome)    linhas.push(`*Anexo: ${m.anexo.nome}*`, '');
       linhas.push(m.texto, '');
     } else if (m.papel === 'resposta') {
-      linhas.push(`### Resposta do ${quem}`, '', m.texto, '');
+      linhas.push(`### Resposta do ${quem}${m.interrompida ? ' (parou no meio)' : ''}`, '', m.texto, '');
     } else {
       const { veredito } = lerRevisao(m.texto);
       linhas.push(`### Revisão do ${quem}${veredito ? ` — ${VEREDITOS[veredito]}` : ''}`, '', m.texto, '');

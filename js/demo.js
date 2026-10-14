@@ -161,6 +161,25 @@ export function esperarDemo(ms, signal) {
   });
 }
 
+/**
+ * Escreve o texto gravado aos pedaços, como a API faz no stream: espera um
+ * pouco e manda de uma a três palavras por vez. `aoParcial` recebe o texto
+ * acumulado; para se o usuário cancelar.
+ */
+export async function escreverDemo(texto, aoParcial, signal, { antes = 900, passo = 28 } = {}) {
+  await esperarDemo(antes, signal);
+  const palavras = String(texto ?? '').split(/(?<=\s)(?=\S)/);
+  let feito = '';
+  for (let i = 0, vez = 0; i < palavras.length; vez++) {
+    const n = 1 + (vez % 3);
+    feito += palavras.slice(i, i + n).join('');
+    i += n;
+    aoParcial?.(feito);
+    if (i < palavras.length) await esperarDemo(passo, signal);
+  }
+  return feito;
+}
+
 /** Histórico da demonstração: três conversas, uma em cada grupo de data. */
 export function conversasDemo(agora = new Date()) {
   const menos = min => new Date(agora.getTime() - min * 60_000).toISOString();

@@ -1,9 +1,11 @@
 /**
  * api-client.js — DeepChat
  * Chamadas ao DeepSeek e à OpenAI, direto do navegador.
+ * - a resposta chega aos pedaços (stream), lida por criarLeitorSSE;
  * - AbortController por pergunta (RequestChain), para o botão Parar;
- * - tempo limite por chamada;
- * - nova tentativa com espera exponencial em falha de rede, tempo esgotado e erro 5xx;
+ * - tempo limite: 60 s sem receber nada (cada pedaço renova o prazo);
+ * - nova tentativa com espera exponencial em falha de rede, tempo esgotado e
+ *   erro 5xx, só enquanto nenhum texto chegou (depois disso, o texto já está na tela);
  * - circuit breaker por API: depois de 3 falhas seguidas, espera 30 s.
  */
 
@@ -69,14 +71,56 @@ const dormir = (ms, signal) => new Promise((res, rej) => {
 
 const transitorio = e => e instanceof ErroApi && ['tempo', 'rede', 'servidor'].includes(e.tipo);
 
-async function chamar(ia, corpo, chaveApi, signal) {
+/**
+ * Lê o fluxo da API de chat (Server-Sent Events, o mesmo formato no DeepSeek
+ * e na OpenAI): linhas "data: {json}" e, no fim, "data: [DONE]". Os pedaços da
+ * rede cortam linhas ao meio; o leitor guarda o resto até a linha fechar.
+ * Função pura, testada em tests/api.test.mjs.
+ * @returns {{ler: (pedaco: string) => object[], fechar: () => object[]}}
+ *   cada evento é {texto} (um pedaço da resposta), {fim: true} ou {erro}.
+ */
+export function criarLeitorSSE() {
+  let resto = '';
+  const evento = linha => {
+    if (!linha.startsWith('data:')) return null;   // linha vazia, ": keep-alive", event:, id:
+    const dado = linha.slice(5).trim();
+    if (dado === '[DONE]') return { fim: true };
+    let j;
+    try { j = JSON.parse(dado); } catch { return null; }
+    if (j?.error) return { erro: String(j.error.message || 'Erro no meio da resposta') };
+    const texto = j?.choices?.[0]?.delta?.content;
+    return typeof texto === 'string' && texto ? { texto } : null;
+  };
+  return {
+    ler(pedaco) {
+      const linhas = (resto + pedaco).split(/\r?\n/);
+      resto = linhas.pop();
+      return linhas.map(evento).filter(Boolean);
+    },
+    fechar() {
+      const ultimo = resto ? evento(resto) : null;
+      resto = '';
+      return ultimo ? [ultimo] : [];
+    },
+  };
+}
+
+async function chamar(ia, corpo, chaveApi, signal, aoParcial) {
   const limite = new AbortController();
-  const timer  = setTimeout(() => limite.abort(), CONFIG.TIMEOUT_MS);
+  // o prazo conta o tempo sem receber nada: cada pedaço que chega renova
+  let timer;
+  const armar = () => { clearTimeout(timer); timer = setTimeout(() => limite.abort(), CONFIG.TIMEOUT_MS); };
+  armar();
   // Junta o Parar do usuário e o tempo limite. Sem AbortSignal.any (Safari < 17.4),
   // liga à mão: o Parar também aborta o controlador do tempo limite.
   let sinal = limite.signal;
   if (signal && AbortSignal.any) sinal = AbortSignal.any([signal, limite.signal]);
   else if (signal) signal.addEventListener('abort', () => limite.abort(), { once: true });
+  const falhaDeRede = (e, parcial = '') => {
+    if (signal?.aborted) return e;
+    if (limite.signal.aborted) return new ErroApi('tempo', 'Tempo esgotado', { parcial });
+    return new ErroApi('rede', e?.message || 'Falha de rede', { parcial });
+  };
   try {
     let resp;
     try {
@@ -87,9 +131,7 @@ async function chamar(ia, corpo, chaveApi, signal) {
         signal: sinal,
       });
     } catch (e) {
-      if (signal?.aborted) throw e;
-      if (limite.signal.aborted) throw new ErroApi('tempo', 'Tempo esgotado');
-      throw new ErroApi('rede', e.message || 'Falha de rede');
+      throw falhaDeRede(e);
     }
     if (!resp.ok) {
       const j = await resp.json().catch(() => ({}));
@@ -99,37 +141,69 @@ async function chamar(ia, corpo, chaveApi, signal) {
       if (resp.status >= 500) throw new ErroApi('servidor', msg, { status: resp.status });
       throw new ErroApi('pedido', msg, { status: resp.status });
     }
-    const dados = await resp.json();
-    const texto = dados?.choices?.[0]?.message?.content;
-    if (!texto || !String(texto).trim()) throw new ErroApi('servidor', 'Resposta vazia');
-    return String(texto);
+    // sem stream (um proxy, uma API que ignorou o pedido): a resposta vem inteira
+    if (!/text\/event-stream/i.test(resp.headers.get('content-type') || '')) {
+      let dados;
+      try { dados = await resp.json(); } catch (e) { throw falhaDeRede(e); }
+      const texto = dados?.choices?.[0]?.message?.content;
+      if (!texto || !String(texto).trim()) throw new ErroApi('servidor', 'Resposta vazia');
+      aoParcial?.(String(texto));
+      return String(texto);
+    }
+
+    const leitor = criarLeitorSSE();
+    const decodificador = new TextDecoder();
+    const corrente = resp.body.getReader();
+    let texto = '';
+    const usar = eventos => {
+      for (const ev of eventos) {
+        if (ev.erro) throw new ErroApi('servidor', ev.erro, { parcial: texto });
+        if (ev.texto) { texto += ev.texto; aoParcial?.(texto); }
+      }
+    };
+    for (;;) {
+      let pedaco;
+      try { pedaco = await corrente.read(); } catch (e) { throw falhaDeRede(e, texto); }
+      if (pedaco.done) break;
+      armar();
+      usar(leitor.ler(decodificador.decode(pedaco.value, { stream: true })));
+    }
+    usar(leitor.ler(decodificador.decode()));
+    usar(leitor.fechar());
+    if (!texto.trim()) throw new ErroApi('servidor', 'Resposta vazia');
+    return texto;
   } finally {
     clearTimeout(timer);
   }
 }
 
 /**
- * Consulta uma IA.
+ * Consulta uma IA. A resposta chega aos pedaços: `aoParcial` recebe o texto
+ * acumulado a cada pedaço, e a promessa resolve com o texto inteiro.
+ * Se a falha vem depois de algum texto, o erro traz `parcial` e não há nova
+ * tentativa (o começo já foi mostrado).
  * @param {'deepseek'|'chatgpt'} ia
  * @param {{role: string, content: any}[]} mensagens
- * @param {{chave: string, modelo?: string, temperatura?: number, signal?: AbortSignal}} opcoes
+ * @param {{chave: string, modelo?: string, temperatura?: number, signal?: AbortSignal,
+ *          aoParcial?: (texto: string) => void}} opcoes
  */
-export async function consultar(ia, mensagens, { chave, modelo, temperatura = 0.7, signal } = {}) {
+export async function consultar(ia, mensagens, { chave, modelo, temperatura = 0.7, signal, aoParcial } = {}) {
   const disj = disjuntores[ia];
   if (disj.aberto()) throw new ErroApi('circuito', 'Muitas falhas seguidas', { segundos: disj.restante() });
   const corpo = {
     model: ia === 'deepseek' ? CONFIG.DEEPSEEK_MODEL : (modelo || CONFIG.MODELOS_CHATGPT[0].id),
     messages: mensagens,
     temperature: temperatura,
+    stream: true,
   };
   for (let tentativa = 1; ; tentativa++) {
     try {
-      const texto = await chamar(ia, corpo, chave, signal);
+      const texto = await chamar(ia, corpo, chave, signal, aoParcial);
       disj.sucesso();
       return texto;
     } catch (e) {
       if (ehCancelamento(e) || signal?.aborted) throw e;
-      if (!transitorio(e) || tentativa >= CONFIG.MAX_TENTATIVAS) {
+      if (!transitorio(e) || e.parcial || tentativa >= CONFIG.MAX_TENTATIVAS) {
         if (transitorio(e)) disj.falha();
         throw e;
       }
