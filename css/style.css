@@ -300,6 +300,15 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 .como-corpo ol { padding-left: 18px; display: grid; gap: 6px; }
 .como-corpo a { color: var(--texto); }
 
+/* Aberto dentro de um iframe de outro site: só o convite para abrir à parte */
+.quadro { min-height: 100dvh; display: flex; flex-direction: column; padding: 28px clamp(20px, 6vw, 88px); }
+.quadro-meio { flex: 1; display: flex; flex-direction: column; justify-content: center; max-width: 620px; padding: 40px 0; }
+.quadro-titulo {
+  font-size: clamp(30px, 4.6vw, 48px); line-height: 1.04; letter-spacing: -.03em; font-weight: 650;
+  font-stretch: 92%; margin-bottom: 16px;
+}
+.quadro-texto { font-size: 17px; line-height: 1.6; color: var(--texto-2); max-width: 34em; margin-bottom: 28px; }
+
 /* ── 6. App e lateral ───────────────────────────────────────────────────── */
 .app { display: grid; grid-template-columns: var(--lateral) minmax(0, 1fr); height: 100dvh; }
 .lateral {

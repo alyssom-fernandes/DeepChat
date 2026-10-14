@@ -1,5 +1,8 @@
 # Normaliza fim de linha (LF no repositório, mesmo vindo do Windows)
 * text=auto
+# A CSP da 404 libera o script e o estilo pelo hash, que muda com CRLF:
+# a cópia local fica em LF, igual à publicada.
+404.html text eol=lf
 *.png binary
 *.jpg binary
 *.ico binary

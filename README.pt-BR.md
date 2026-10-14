@@ -120,7 +120,15 @@ Capturadas do modo demonstração.
   (pergunta, nome de arquivo, título) é escapado antes de virar HTML.
 - **Content Security Policy** sem `'unsafe-inline'`, com conexões liberadas
   só para as duas APIs. O `marked` e o DOMPurify vêm com versão fixa e
-  conferência de integridade (SRI).
+  conferência de integridade (SRI). A página 404 libera o script e o estilo
+  dela pelo hash, e um teste confere esses hashes.
+- **O que mais a página carrega.** As fontes vêm do Google Fonts, e as duas
+  bibliotecas de Markdown, do jsDelivr: esses serviços veem o endereço IP de
+  quem abre a página, nunca as conversas. Nenhum pedido manda o endereço da
+  página (`Referer`), nem às APIs.
+- **Dentro de outro site.** Num iframe, o DeepChat não pede nem abre as
+  chaves (o GitHub Pages não manda o cabeçalho que impede isso) e oferece
+  abrir numa aba própria. A demonstração, que não tem chaves, abre.
 
 ## Como é feito
 

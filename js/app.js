@@ -37,6 +37,7 @@ async function iniciar() {
   ligarEventos();
 
   if (new URLSearchParams(location.search).get('demo') === '1') { iniciarDemo(); return; }
+  if (dentroDeOutroSite()) { mostrarQuadro(); return; }
 
   const chaves = await arm.carregarChaves();
   if (chaves?.deepseekKey && chaves?.chatgptKey) {
@@ -45,6 +46,18 @@ async function iniciar() {
   } else {
     mostrarInicio();
   }
+}
+
+/* Dentro de um iframe, outro site poderia cobrir os campos e capturar cliques
+   (clickjacking). O GitHub Pages não deixa mandar o cabeçalho que proíbe isso,
+   então o app não pede nem abre as chaves ali; a demonstração, sem chaves, abre. */
+function dentroDeOutroSite() {
+  try { return window.top !== window.self; } catch { return true; }
+}
+
+function mostrarQuadro() {
+  $('telaQuadro').hidden = false;
+  $('quadroAbrir').href = location.href;
 }
 
 function mostrarInicio() {
@@ -579,7 +592,8 @@ async function anexar(arquivo) {
     return;
   }
   const a = estado.anexo;
-  $('anexoIcone').innerHTML = a.imagem ? `<img src="${a.dataUrl}" alt="">` : ICONE.arquivo;
+  if (a.imagem) $('anexoIcone').replaceChildren(Object.assign(document.createElement('img'), { src: a.dataUrl, alt: '' }));
+  else $('anexoIcone').innerHTML = ICONE.arquivo;
   $('anexoNome').textContent = a.nome;
   $('anexoTam').textContent = formatarBytes(a.tamanho) + (a.cortado ? ' · vai só o começo' : '');
   $('extraAnexo').hidden = false;

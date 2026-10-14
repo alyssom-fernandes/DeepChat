@@ -126,7 +126,15 @@ Taken from the demo mode.
   (question, file name, title) is escaped before it becomes HTML.
 - **Content Security Policy** without `'unsafe-inline'`, with connections
   allowed only to the two APIs. `marked` and DOMPurify are pinned and loaded
-  with Subresource Integrity (SRI).
+  with Subresource Integrity (SRI). The 404 page allows its inline script
+  and style by hash, and a test checks those hashes.
+- **What else the page loads.** The fonts come from Google Fonts and the two
+  Markdown libraries from jsDelivr: those services see the visitor's IP
+  address, never the conversations. No request sends the page address
+  (`Referer`), not even to the APIs.
+- **Inside another site.** In an iframe, DeepChat does not ask for or open
+  the keys (GitHub Pages cannot send the header that blocks framing); it
+  offers to open in its own tab. The demo, which has no keys, still opens.
 
 ## How it is built
 
