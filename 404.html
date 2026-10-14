@@ -8,8 +8,8 @@
 <meta http-equiv="Content-Security-Policy"
   content="default-src 'none';
            script-src 'sha256-5wqEJPbCLiex/287FlQcCssvFDHVUSaj9VJ8bajIwSI=' 'sha256-j0VrvT/u3nbn7XwDIdbeUXeLsBoxDhsKGiapRbzqSvk=';
-           style-src 'sha256-MsqpVVh3a8/l7gI7VJCcCgWxdDn5bF/jPGyThRBihys=' https://fonts.googleapis.com;
-           font-src https://fonts.gstatic.com;
+           style-src 'sha256-ODkfKvF9WM7YDVPtMPQUax6r2vyrjEaA3OEoyN1Pnn8=';
+           font-src 'self';
            img-src data:;
            base-uri 'none';
            form-action 'none'">
@@ -18,9 +18,6 @@
 <meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23141416'/%3E%3Ccircle cx='12.5' cy='16' r='7.5' fill='none' stroke='%238ea2ff' stroke-width='2.6'/%3E%3Ccircle cx='19.5' cy='16' r='7.5' fill='none' stroke='%2345d3a2' stroke-width='2.6'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@85..100,400..700&family=JetBrains+Mono:wght@700&display=swap">
 <!-- Página própria para endereço que não existe (o GitHub Pages usa o 404.html
      da raiz). Segue o tema escolhido no DeepChat e, sem escolha, o do aparelho. -->
 <script>
@@ -32,6 +29,11 @@
   })();
 </script>
 <style>
+  /* as fontes do próprio site; o endereço é absoluto porque a 404 aparece em qualquer caminho */
+  @font-face { font-family: 'Instrument Sans'; font-weight: 400 700; font-stretch: 85% 100%; font-display: swap;
+               src: url('/DeepChat/fonts/instrument-sans-latin.woff2') format('woff2'); }
+  @font-face { font-family: 'JetBrains Mono'; font-weight: 400 700; font-display: swap;
+               src: url('/DeepChat/fonts/jetbrains-mono-latin.woff2') format('woff2'); }
   :root { --fundo: #141416; --borda: #2a2a30; --texto: #ededef; --fraco: #a9a9b3; --apagado: #8a8a94; --tinta: #ededef; --sobre-tinta: #141416;
           --ds: #8ea2ff; --gpt: #45d3a2; --foco: #8ea2ff; --pf-afn: #c44a5a; --pf-sys: rgba(255,255,255,.32); color-scheme: dark; }
   [data-tema="claro"] { --fundo: #ffffff; --borda: #e5e5e9; --texto: #18181b; --fraco: #52525b; --apagado: #6b6b75; --tinta: #18181b; --sobre-tinta: #fff;

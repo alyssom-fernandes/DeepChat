@@ -41,3 +41,14 @@ test('as duas páginas não mandam o endereço de origem (Referer)', () => {
     assert.match(ler(arq), /<meta name="referrer" content="no-referrer">/, arq);
   }
 });
+
+test('fontes do próprio site: nenhuma página chama o Google, e cada fonte citada existe', () => {
+  for (const arq of ['index.html', '404.html', 'css/style.css']) {
+    assert.ok(!/googleapis|gstatic/.test(ler(arq)), arq);
+  }
+  assert.equal(diretiva(csp(ler('index.html')), 'font-src'), "font-src 'self'");
+  const citadas = [...ler('css/style.css').matchAll(/url\('\.\.\/(fonts\/[\w.-]+)'\)/g)].map(m => m[1]);
+  assert.equal(citadas.length, 4);
+  for (const f of citadas) assert.ok(readFileSync(new URL(`../${f}`, import.meta.url)).subarray(0, 4).toString() === 'wOF2', f);
+  for (const licenca of ['fonts/OFL-instrument-sans.txt', 'fonts/OFL-jetbrains-mono.txt']) assert.match(ler(licenca), /SIL Open Font License/);
+});
