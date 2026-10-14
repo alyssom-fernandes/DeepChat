@@ -49,6 +49,12 @@
   --sombra: 0 16px 40px rgba(0, 0, 0, .5), 0 2px 8px rgba(0, 0, 0, .3);
   --pf-afn: #c44a5a;
   --pf-sys: rgba(255, 255, 255, .32);
+  /* código: cores mais quietas que as do veredito, que continuam as mais fortes da tela */
+  --tk-k: #c4a2ff;   /* palavra-chave */
+  --tk-s: #e0bf8f;   /* texto */
+  --tk-n: #79c9d8;   /* número e literal */
+  --tk-p: #eba6c8;   /* chave e propriedade */
+  --tk-c: #8a8a94;   /* comentário */
 }
 
 [data-tema="claro"] {
@@ -80,6 +86,11 @@
   --sombra: 0 16px 40px rgba(24, 24, 32, .14), 0 2px 6px rgba(24, 24, 32, .06);
   --pf-afn: #6b1f2a;
   --pf-sys: #505050;
+  --tk-k: #6f35c2;
+  --tk-s: #8a5412;
+  --tk-n: #0a6a80;
+  --tk-p: #a8306a;
+  --tk-c: #6b6b75;
 }
 
 [data-ia="deepseek"] { --cor-ia: var(--ds);  --cor-ia-fundo: var(--ds-fundo); }
@@ -241,13 +252,14 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
   color: var(--cor-ia); background: var(--cor-ia-fundo);
 }
 
+/* O veredito é o que o DeepChat tem de próprio: a palavra na cor dele, sem
+   caixinha. O cartão da revisão e a margem da resposta levam a mesma cor. */
 .veredito {
-  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
-  height: 28px; padding: 0 10px 0 8px; border-radius: 8px;
-  font-size: 13px; font-weight: 600; white-space: nowrap;
-  color: var(--cor-v); background: var(--cor-v-fundo);
+  display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
+  font-size: 15px; font-weight: 650; letter-spacing: -.005em; white-space: nowrap;
+  color: var(--cor-v);
 }
-.veredito .ic { width: 16px; height: 16px; }
+.veredito .ic { width: 18px; height: 18px; stroke-width: 2; }
 
 /* ── 5. Tela de início ──────────────────────────────────────────────────── */
 .inicio {
@@ -273,11 +285,29 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 }
 .am-cab { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .am-cab strong { font-size: 13px; font-weight: 600; }
+.am-resposta { position: relative; }
 .am-resposta p { color: var(--texto-2); padding-left: 30px; }
-.am-revisao { border: 1px solid var(--borda); border-radius: 14px; background: var(--rev); padding: 12px 14px; }
+/* a marca do revisor desce da inicial, ao lado da resposta, na cor do veredito */
+.am-resposta::before {
+  content: ''; position: absolute; left: 10px; top: 30px; bottom: 3px; width: 2px; border-radius: 2px;
+  background: var(--cor-v); transform-origin: top;
+}
+.am-revisao {
+  border: 1px solid color-mix(in srgb, var(--cor-v) 32%, var(--borda)); border-radius: 14px;
+  background: color-mix(in srgb, var(--cor-v) 5%, var(--rev)); padding: 12px 14px;
+}
 .am-revisao .am-cab { margin-bottom: 8px; }
-.am-revisao .veredito { margin-left: auto; height: 26px; }
+.am-revisao .veredito { margin-left: auto; font-size: 14px; }
 .am-revisao p { color: var(--texto-2); }
+
+/* um momento só, ao abrir: a pergunta, a resposta, a revisão e o veredito carimbado */
+.amostra > * { animation: entrar .5s cubic-bezier(.2, .7, .2, 1) both; }
+.am-pergunta { animation-delay: .15s; }
+.am-resposta { animation-delay: .55s; }
+.am-revisao  { animation-delay: 1.05s; }
+.am-revisao .veredito { animation: carimbo .42s 1.6s cubic-bezier(.3, 1.35, .5, 1) both; }
+.am-resposta::before { animation: tracar .6s 1.75s cubic-bezier(.2, .7, .2, 1) both; }
+.inicio-demo { display: none; }
 
 .inicio-form {
   display: flex; align-items: center; justify-content: center;
@@ -453,6 +483,17 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 .anexo-tam { color: var(--texto-3); white-space: nowrap; }
 .anexo-imagem { display: block; max-width: 100%; max-height: 260px; border-radius: 10px; margin: 2px 0 8px; }
 
+/* Marca do revisor: a resposta revisada ganha um traço na margem, na cor do
+   veredito. Enquanto a revisão chega, o traço cinza vai descendo. */
+.msg-resposta > .md { position: relative; }
+.msg-resposta > .md::before {
+  content: ''; position: absolute; left: -15px; top: .3em; bottom: .3em; width: 2px; border-radius: 2px;
+  background-color: var(--cor-v, transparent); transform: scaleY(0); transform-origin: top;
+  transition: transform .5s cubic-bezier(.2, .7, .2, 1), background-color .45s;
+}
+.msg-resposta[data-veredito] > .md::before { transform: none; }
+.msg-resposta.em-revisao > .md::before { transform: none; background-color: var(--borda-2); animation: tracar 1.6s cubic-bezier(.2, .7, .2, 1) both; }
+
 .msg-acoes { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 8px; opacity: 0; transition: opacity var(--dur); }
 .msg-pergunta .msg-acoes { margin-top: 4px; }
 .msg:hover .msg-acoes, .msg:focus-within .msg-acoes,
@@ -514,6 +555,13 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 .md pre { margin: 0; padding: 14px 16px; overflow-x: auto; font: 13px/1.65 var(--mono); tab-size: 2; }
 .md code, .md pre { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'calt' 0; }
 .md pre code { font: inherit; }
+/* cores do código (js/realce.js) */
+.md .tk-k { color: var(--tk-k); }
+.md .tk-s { color: var(--tk-s); }
+.md .tk-n { color: var(--tk-n); }
+.md .tk-p { color: var(--tk-p); }
+.md .tk-c { color: var(--tk-c); }
+.md .tk-f { font-weight: 500; }
 .md-tabela { overflow-x: auto; border: 1px solid var(--borda); border-radius: 12px; }
 .md table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .md th, .md td { padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--borda); vertical-align: top; overflow-wrap: normal; word-break: normal; }
@@ -524,8 +572,16 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 .md input[type="checkbox"] { margin: 0 6px 0 0; vertical-align: -2px; accent-color: var(--tinta); }
 
 /* ── 10. Revisão ────────────────────────────────────────────────────────── */
-.rev { border: 1px solid var(--borda); border-radius: 16px; background: var(--rev); overflow: hidden; }
-.rev-cab { display: flex; align-items: center; gap: 10px; padding: 12px 14px 12px 16px; border-bottom: 1px solid var(--borda); }
+.rev { border: 1px solid var(--borda); border-radius: 16px; background: var(--rev); overflow: hidden; transition: border-color .45s; }
+.rev-cab { display: flex; align-items: center; gap: 10px; padding: 12px 16px 12px 16px; border-bottom: 1px solid var(--borda); transition: background-color .45s; }
+/* com veredito, o cartão inteiro puxa de leve para a cor dele */
+.msg-revisao[data-veredito] .rev { border-color: color-mix(in srgb, var(--cor-v) 32%, var(--borda)); }
+.msg-revisao[data-veredito] .rev-cab {
+  background: color-mix(in srgb, var(--cor-v) 7%, var(--rev));
+  border-bottom-color: color-mix(in srgb, var(--cor-v) 20%, var(--borda));
+}
+/* o veredito chega no meio da revisão: carimba uma vez */
+.msg-revisao.escrevendo .veredito { animation: carimbo .42s cubic-bezier(.3, 1.35, .5, 1) both; }
 .rev-quem { flex: 1; min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; font-size: 13px; }
 /* minmax(0, 1fr): sem isso, um bloco de código largo alarga a coluna e passa
    do cartão (no celular, a versão revisada era cortada) */
@@ -611,17 +667,30 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 .extra-texto strong { color: var(--texto); font-weight: 600; }
 #citacaoAutor, #anexoTam { flex-shrink: 0; }
 .dica { max-width: var(--coluna); margin: 8px auto 0; text-align: center; font-size: 12px; color: var(--texto-3); }
+/* Durante a pergunta, a ordem vira o status de quem está trabalhando */
+.ordem.status { cursor: default; }
+.ordem.status:hover { background: none; border-color: var(--borda); }
+.ordem.status .ordem-ia::before { animation: pulsar 1.2s ease-in-out infinite; }
+.status-acao { color: var(--texto-2); }
+.status-tempo { color: var(--texto-3); font-variant-numeric: tabular-nums; }
+
+/* Ir para o fim: redondo, à direita, alinhado à caixa de pergunta (não cobre a linha que se lê) */
 .ir-fim {
-  position: absolute; left: 50%; top: -52px; z-index: 5; transform: translateX(-50%);
-  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
-  border: 1px solid var(--borda-2); border-radius: 18px; background: var(--sup);
-  box-shadow: var(--sombra); font-size: 13px; font-weight: 600; color: var(--texto);
+  position: absolute; top: -50px; right: max(24px, calc((100% - var(--coluna)) / 2)); z-index: 5;
+  display: grid; place-items: center; width: 38px; height: 38px; padding: 0;
+  border: 1px solid var(--borda-2); border-radius: 50%; background: var(--sup);
+  box-shadow: var(--sombra); color: var(--texto);
   animation: aparecer .16s ease-out;
 }
-.ir-fim::after {
-  content: ''; width: 6px; height: 6px; margin-top: -3px;
-  border-right: 1.75px solid currentColor; border-bottom: 1.75px solid currentColor; transform: rotate(45deg);
+.ir-fim:hover { background: var(--sup-2); }
+.ir-fim .ic { width: 18px; height: 18px; }
+/* a revisão fora da vista: um ponto, cinza enquanto ela chega e na cor do veredito quando fica pronta */
+.ir-fim.com-revisao::after {
+  content: ''; position: absolute; top: 0; right: 0; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--texto-3); box-shadow: 0 0 0 2px var(--fundo);
 }
+.ir-fim.com-revisao:not([data-veredito])::after { animation: pulsar 1.2s ease-in-out infinite; }
+.ir-fim[data-veredito]::after { background: var(--cor-v); }
 
 /* ── 12. Diálogos ───────────────────────────────────────────────────────── */
 .dlg {
@@ -746,16 +815,21 @@ legend { padding: 0; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
   .barra { padding: 0 6px; gap: 4px; }
   .coluna { padding: 22px 16px 16px; }
   .rodape-pergunta { padding: 0 10px max(10px, env(safe-area-inset-bottom)); }
+  .ir-fim { right: 12px; }
+  .msg-resposta > .md::before { left: -10px; }
   .toasts { left: 50%; }
 
+  /* início no celular: título, prévia e demonstração na primeira tela; as chaves depois */
   .inicio { display: flex; flex-direction: column; }
   .inicio-apresenta, .inicio-meio { display: contents; }
   .inicio-apresenta > .logo { order: 1; padding: 20px 20px 0; }
-  .inicio-titulo { order: 2; padding: 28px 20px 0; margin-bottom: 14px; font-size: clamp(34px, 9.5vw, 44px); }
-  .inicio-texto { order: 3; padding: 0 20px; font-size: 16px; margin-bottom: 8px; }
-  .inicio-form { order: 4; padding: 24px 20px 32px; background: none; border: 0; justify-content: flex-start; }
-  .amostra { order: 5; padding: 8px 20px 36px; max-width: none; }
-  .inicio-apresenta .page-footer { order: 6; margin: 0; padding: 16px 20px max(16px, env(safe-area-inset-bottom)); justify-content: center; border-top-color: var(--borda); }
+  .inicio-titulo { order: 2; padding: 26px 20px 0; margin-bottom: 12px; font-size: clamp(34px, 9.5vw, 44px); }
+  .inicio-texto { order: 3; padding: 0 20px; font-size: 16px; margin-bottom: 22px; }
+  .amostra { order: 4; padding: 0 20px 20px; max-width: none; }
+  .inicio-demo { order: 5; display: inline-flex; width: auto; margin: 0 20px; }
+  .inicio-form { order: 6; padding: 28px 20px 32px; background: none; border: 0; justify-content: flex-start; }
+  .form-demo { display: none; }
+  .inicio-apresenta .page-footer { order: 7; margin: 0; padding: 16px 20px max(16px, env(safe-area-inset-bottom)); justify-content: center; border-top-color: var(--borda); }
   #formChaves { max-width: none; }
   #formChaves h2 { font-size: 19px; }
 
@@ -828,7 +902,7 @@ legend { padding: 0; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
   .compositor { padding: 4px 6px 4px 8px; border-radius: 14px; }
   #pergunta { min-height: 36px; padding: 6px 6px 2px; }
   .compositor-barra .btn-icone, .btn-enviar { width: 34px; height: 34px; }
-  .ir-fim { top: -44px; height: 32px; }
+  .ir-fim { top: -42px; width: 34px; height: 34px; }
 }
 
 /* telas largas: coluna um pouco mais larga */
@@ -843,6 +917,7 @@ legend { padding: 0; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
     --borda: #d4d4d8; --borda-2: #c4c4cc; --texto: #000; --texto-2: #3f3f46; --texto-3: #52525b;
     --balao: #f2f2f4; --codigo: #f7f7f8;
     --ds: #2f47b8; --gpt: #066b4f; --ok: #0f6b41; --parcial: #8a4f00; --erro: #a8251f;
+    --tk-k: #5f2aa8; --tk-s: #7a4a10; --tk-n: #0a5e70; --tk-p: #93285c; --tk-c: #52525b;
     --ok-fundo: #fff; --parcial-fundo: #fff; --erro-fundo: #fff;
   }
   html, body { height: auto; background: #fff; }
@@ -859,7 +934,7 @@ legend { padding: 0; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
   .msg-pergunta { align-items: stretch; }
   .balao { max-width: none; border: 1px solid #d4d4d8; }
   .rev { border-color: #a1a1aa; }
-  .veredito { border: 1px solid currentColor; }
+  .veredito { padding: 1px 6px; border: 1px solid currentColor; border-radius: 6px; }
   .md pre { white-space: pre-wrap; overflow: visible; }
   .md-tabela { overflow: visible; }
   .rev-par { grid-template-columns: 1fr 1fr; }
@@ -873,9 +948,13 @@ legend { padding: 0; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
 @keyframes subir    { from { opacity: 0; transform: translateY(8px); }  to { opacity: 1; transform: none; } }
 @keyframes folha    { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
 @keyframes brilho   { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@keyframes entrar   { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes carimbo  { from { opacity: 0; transform: scale(1.6); } to { opacity: 1; transform: none; } }
+@keyframes tracar   { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes pulsar   { 50% { opacity: .3; } }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+  *, *::before, *::after { animation-duration: .001ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
   .esqueleto span { background: var(--sup-2); }
 }
 

@@ -3,11 +3,12 @@
  * Desenho da interface: mensagens, revisão, estados de espera, avisos,
  * histórico, toasts e diálogos. Sem regra de negócio.
  * Todo texto que vem de fora (usuário, IA, nome de arquivo) passa por esc()
- * ou pelo DOMPurify antes de virar HTML.
+ * ou pelo DOMPurify antes de virar HTML; o código colorido, pelo esc() do realce.js.
  */
 
 import { esc, formatarBytes, horaCurta, grupoDeData, resumir } from './texto.js';
 import { lerRevisao, nomeDaIA, VEREDITOS } from './revisao.js';
+import { realcar, familiaDe } from './realce.js';
 
 export const $ = id => document.getElementById(id);
 
@@ -43,6 +44,7 @@ export const ICONE = {
   arquivo:   svg('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/>'),
   imagem:    svg('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>'),
   seta:      svg('<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>'),
+  descer:    svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
   externo:   svg('<path d="M7 17 17 7"/><path d="M8 7h9v9"/>'),
   chave:     svg('<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3"/><path d="m16 7 3 3"/><path d="m19 4 2 2"/>'),
   vereditoCorreta:   svg('<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>'),
@@ -119,6 +121,7 @@ export function preencherMarkdown(el, texto, chave) {
   el.querySelectorAll('pre').forEach(pre => {
     const code = pre.querySelector('code');
     const lingua = (code?.className.match(/language-([\w+#-]+)/) || [])[1] || '';
+    if (code && familiaDe(lingua)) code.innerHTML = realcar(code.textContent, lingua);
     const bloco = document.createElement('div');
     bloco.className = 'md-codigo';
     bloco.innerHTML = `<div class="md-codigo-cab"><span>${esc(lingua || 'código')}</span>` +
@@ -155,14 +158,20 @@ function htmlAnexo(anexo) {
  * Elemento de uma mensagem.
  * @param {object} m mensagem (ver conversa.js)
  * A resposta sempre traz "Outra resposta"; o CSS só mostra na última (.ultima).
+ * Com `m.escrevendo`, é a mensagem que ainda está chegando: sem ações e sem
+ * guardar o Markdown no cache (o texto muda a cada pedaço).
  */
 export function elementoMensagem(m) {
   const art = document.createElement('article');
-  art.className = `msg msg-${m.papel}`;
+  art.className = `msg msg-${m.papel}${m.escrevendo ? ' escrevendo' : ''}`;
   art.dataset.id = m.id;
   art.dataset.turno = m.turno;
   if (m.autor !== 'usuario') art.dataset.ia = m.autor;
+  if (m.escrevendo) art.setAttribute('aria-busy', 'true');
   const hora = horaCurta(m.em);
+  const cache = sufixo => (m.escrevendo ? null : sufixo ? `${m.id}:${sufixo}` : m.id);
+  const meta = (texto, hora) => `<span class="msg-meta">${
+    [texto, hora ? `<time datetime="${esc(m.em)}">${hora}</time>` : ''].filter(Boolean).join(' · ')}</span>`;
 
   if (m.papel === 'pergunta') {
     art.setAttribute('aria-label', 'Sua pergunta');
@@ -176,12 +185,13 @@ export function elementoMensagem(m) {
 
   if (m.papel === 'resposta') {
     art.setAttribute('aria-label', `Resposta do ${nomeDaIA(m.autor)}`);
+    const situacao = m.escrevendo ? 'está respondendo' : m.interrompida ? 'parou no meio' : 'respondeu';
     art.innerHTML = `
       <header class="msg-cab">${marcaIA(m.autor)}<strong class="msg-autor">${nomeDaIA(m.autor)}</strong>
-        <span class="msg-meta">respondeu${hora ? ` · <time datetime="${esc(m.em)}">${hora}</time>` : ''}</span></header>
+        ${meta(situacao, hora)}</header>
       <div class="md"></div>
-      ${acoes(['copiar', 'citar', 'outra'])}`;
-    preencherMarkdown(art.querySelector('.md'), m.texto, m.id);
+      ${m.escrevendo ? '' : acoes(['copiar', 'citar', 'outra'])}`;
+    preencherMarkdown(art.querySelector('.md'), m.texto, cache());
     return art;
   }
 
@@ -195,18 +205,18 @@ export function elementoMensagem(m) {
     <div class="rev">
       <header class="rev-cab">${marcaIA(m.autor)}
         <span class="rev-quem"><strong class="msg-autor">Revisão do ${nomeDaIA(m.autor)}</strong>
-          ${hora ? `<span class="msg-meta"><time datetime="${esc(m.em)}">${hora}</time></span>` : ''}</span>
+          ${m.escrevendo ? meta('revisando') : hora ? meta('', hora) : ''}</span>
         ${veredito}
       </header>
       <div class="rev-corpo"></div>
     </div>
-    ${acoes(['copiar', 'citar'])}`;
+    ${m.escrevendo ? '' : acoes(['copiar', 'citar'])}`;
   const corpo = art.querySelector('.rev-corpo');
 
   if (!rev.secoes.length) {
     const md = document.createElement('div');
     md.className = 'md';
-    corpo.appendChild(preencherMarkdown(md, rev.introducao || m.texto, m.id));
+    corpo.appendChild(preencherMarkdown(md, rev.introducao || m.texto, cache()));
     return art;
   }
 
@@ -216,13 +226,13 @@ export function elementoMensagem(m) {
     el.innerHTML = s.chave === 'versao'
       ? `<summary><span>Ver a versão revisada</span></summary><div class="md"></div>`
       : `<h2 class="rev-sec-titulo">${s.titulo}</h2><div class="md"></div>`;
-    preencherMarkdown(el.querySelector('.md'), s.corpo, `${m.id}:${s.chave}`);
+    preencherMarkdown(el.querySelector('.md'), s.corpo, cache(s.chave));
     return el;
   };
   if (rev.introducao) {
     const md = document.createElement('div');
     md.className = 'md rev-intro';
-    corpo.appendChild(preencherMarkdown(md, rev.introducao, `${m.id}:intro`));
+    corpo.appendChild(preencherMarkdown(md, rev.introducao, cache('intro')));
   }
   const fortes = rev.secoes.find(s => s.chave === 'fortes');
   const melhorar = rev.secoes.find(s => s.chave === 'melhorar');
@@ -236,6 +246,29 @@ export function elementoMensagem(m) {
       corpo.appendChild(secao(s));
     }
   }
+  return art;
+}
+
+/**
+ * Atualiza a mensagem que está chegando. A resposta troca só o texto (a
+ * seleção e a rolagem ficam); a revisão troca o corpo, porque as seções
+ * aparecem no meio do caminho, e o cabeçalho só quando o veredito chega
+ * (assim o veredito anima uma vez só).
+ */
+export function atualizarMensagem(art, m) {
+  if (m.papel === 'resposta') {
+    preencherMarkdown(art.querySelector('.md'), m.texto);
+    return art;
+  }
+  const novo = elementoMensagem(m);
+  if (novo.dataset.veredito && novo.dataset.veredito !== art.dataset.veredito) {
+    art.dataset.veredito = novo.dataset.veredito;
+    art.setAttribute('aria-label', novo.getAttribute('aria-label'));
+    art.querySelector('.rev-cab').replaceWith(novo.querySelector('.rev-cab'));
+  }
+  const corpo = novo.querySelector('.rev-corpo');
+  if (art.querySelector('.rev-versao')?.open) corpo.querySelector('.rev-versao')?.setAttribute('open', '');
+  art.querySelector('.rev-corpo').replaceWith(corpo);
   return art;
 }
 

@@ -73,10 +73,10 @@
     </div>
     <div class="inicio-meio">
       <h1 class="inicio-titulo" id="inicioTitulo">Uma IA responde.<br><span>Outra revisa.</span></h1>
-      <p class="inicio-texto">O DeepChat manda sua pergunta para o DeepSeek e a resposta para o ChatGPT conferir. Você recebe as duas coisas: a resposta e um veredito sobre ela, com o que está certo, o que falta e, quando precisa, a versão corrigida.</p>
+      <p class="inicio-texto">O DeepChat manda sua pergunta ao DeepSeek e a resposta ao ChatGPT, que confere e dá um veredito: o que está certo, o que falta e, quando precisa, a versão corrigida.</p>
       <figure class="amostra" aria-hidden="true">
         <div class="am-pergunta">A Muralha da China dá para ver do espaço?</div>
-        <div class="am-resposta" data-ia="deepseek">
+        <div class="am-resposta" data-ia="deepseek" data-veredito="incorreta">
           <div class="am-cab"><span class="marca-ia">D</span><strong>DeepSeek</strong></div>
           <p>Sim. É a única construção humana visível a olho nu do espaço, e pode ser vista até da Lua.</p>
         </div>
@@ -86,6 +86,8 @@
           <p>É um mito. A muralha é estreita e tem a cor do terreno; astronautas confirmam que não dá para vê-la a olho nu da órbita.</p>
         </div>
       </figure>
+      <!-- no celular, a demonstração vem antes das chaves -->
+      <a class="btn btn-sec btn-largo inicio-demo" href="?demo=1">Ver como funciona, sem chaves</a>
     </div>
     <footer class="page-footer" aria-label="AFN Systems, DeepChat">
       <div class="pf-marca"><span class="pf-afn">AFN</span><span class="pf-gap"></span><span class="pf-sys">SYSTEMS</span></div>
@@ -125,8 +127,10 @@
       <p class="form-erro" id="erroChaves" role="alert" hidden></p>
 
       <button type="submit" class="btn btn-pri btn-largo" id="btnComecar">Começar</button>
-      <div class="ou" aria-hidden="true">ou</div>
-      <a class="btn btn-sec btn-largo" href="?demo=1">Ver como funciona, sem chaves</a>
+      <div class="form-demo">
+        <div class="ou" aria-hidden="true">ou</div>
+        <a class="btn btn-sec btn-largo" href="?demo=1">Ver como funciona, sem chaves</a>
+      </div>
 
       <details class="como">
         <summary>Quanto custa e como criar as chaves</summary>
@@ -201,7 +205,7 @@
     </div>
 
     <div class="rodape-pergunta">
-      <button type="button" class="ir-fim" id="btnIrFim" hidden><span id="irFimTexto">Ir para o fim</span></button>
+      <button type="button" class="ir-fim" id="btnIrFim" data-ic="descer" title="Ir para o fim" hidden><span class="sr-only" id="irFimTexto">Ir para o fim</span></button>
       <form class="compositor" id="compositor" autocomplete="off">
         <div class="compositor-extra" id="extraCitacao" hidden>
           <span class="extra-ic" data-ic="citar" aria-hidden="true"></span>

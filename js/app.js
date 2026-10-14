@@ -13,8 +13,8 @@ import { SISTEMA_RESPOSTA, SISTEMA_REVISAO, promptRevisao, nomeDaIA, lerRevisao,
 import { criarConversa, tituloDaConversa, contextoParaApi, textoParaApi, contextoResumido,
          markdownDaConversa, filtrarHistorico, novoId } from './conversa.js';
 import { formatarBytes, slug, dataArquivo, dataLonga, resumir } from './texto.js';
-import { PERGUNTAS_EXEMPLO, exemploDaPergunta, esperarDemo, conversasDemo } from './demo.js';
-import { $, ICONE, elementoMensagem, elementoPensando, elementoAviso, elementoVazio,
+import { PERGUNTAS_EXEMPLO, exemploDaPergunta, escreverDemo, conversasDemo } from './demo.js';
+import { $, ICONE, elementoMensagem, atualizarMensagem, elementoPensando, elementoAviso, elementoVazio,
          renderizarHistorico, toast, abrirDialogo, confirmar, anunciar } from './ui.js';
 
 const MAX_ARQUIVO = 5 * 1024 * 1024;
@@ -139,6 +139,7 @@ function desenharConversa() {
     for (const m of msgs) frag.appendChild(elementoMensagem(comAnexoDaSessao(m)));
     col.appendChild(frag);
     marcarUltima();
+    marcarRevisadas();
     avisarTurnosIncompletos();
   }
   atualizarTitulo();
@@ -157,6 +158,10 @@ function avisarTurnosIncompletos() {
       avisoNaConversa({ tipo: 'info', turno: p.id, titulo: 'Esta pergunta ficou sem resposta',
         acoes: [{ rotulo: 'Perguntar de novo', acao: 'repetir', principal: true }] },
       { repetir: () => rodarTurno(p) }, { rolar: false });
+    } else if (resposta.interrompida) {
+      avisoNaConversa({ tipo: 'info', turno: p.id, titulo: 'Esta resposta parou no meio e não foi revisada',
+        acoes: [{ rotulo: 'Perguntar de novo', acao: 'repetir', principal: true }] },
+      { repetir: () => refazerTurno(p) }, { rolar: false });
     } else if (!doTurno.some(m => m.papel === 'revisao')) {
       avisoNaConversa({ tipo: 'info', turno: p.id, titulo: 'A resposta não foi revisada',
         acoes: [{ rotulo: 'Revisar agora', acao: 'repetir', principal: true }] },
@@ -185,6 +190,17 @@ function marcarUltima() {
   $('conversa').querySelectorAll('.msg-resposta').forEach(r => r.classList.toggle('ultima', r.dataset.turno === ultimo));
 }
 
+/* A resposta revisada leva na margem a marca da revisão dela, na cor do
+   veredito, como a anotação de um revisor; enquanto a revisão chega, cinza. */
+function marcarRevisadas() {
+  const col = $('conversa');
+  col.querySelectorAll('.msg-resposta').forEach(r => {
+    const rev = col.querySelector(`.msg-revisao[data-turno="${CSS.escape(r.dataset.turno)}"]:not(.escrevendo)`);
+    if (rev?.dataset.veredito) r.dataset.veredito = rev.dataset.veredito;
+    else delete r.dataset.veredito;
+  });
+}
+
 const ultimoTurno = () => [...estado.conversa.mensagens].reverse().find(m => m.papel === 'pergunta')?.turno ?? null;
 
 /** Mensagens anteriores ao turno: é o contexto que a IA recebe. */
@@ -207,7 +223,12 @@ function atualizarTitulo() {
   document.title = estado.conversa.mensagens.length ? `${t} · DeepChat` : 'DeepChat · Uma IA responde, outra revisa';
 }
 
-function adicionarMensagem(m) {
+/**
+ * Põe a mensagem na conversa e na tela.
+ * @param {{rolar?: boolean}} op `rolar: false` quando o texto já chegou aos
+ *   pedaços na tela (a rolagem foi feita no primeiro pedaço).
+ */
+function adicionarMensagem(m, { rolar = true } = {}) {
   const col = $('conversa');
   col.querySelector('.vazio')?.remove();
   // resposta e revisão entram no lugar do turno, mesmo se já houver pergunta mais nova
@@ -217,15 +238,20 @@ function adicionarMensagem(m) {
   const el = elementoMensagem(comAnexoDaSessao(m));
   inserirNoTurno(el, m.papel === 'pergunta' ? null : m.turno);
   marcarUltima();
+  if (m.papel === 'revisao') marcarRevisadas();
   if (m.papel === 'pergunta') { atualizarTitulo(); rolarParaFim(); }
+  else if (m.papel === 'revisao' && m.turno === ultimoTurno()) avisarSeFora(el, el.dataset.veredito);
+  else if (!rolar) { /* já rolou */ }
   else if (m.turno !== ultimoTurno()) rolarAte(el);
-  else if (m.papel === 'resposta') {
-    const pergunta = col.querySelector(`.msg-pergunta[data-turno="${CSS.escape(m.turno)}"]`);
-    rolarAte(pergunta && pergunta.getBoundingClientRect().height < rolagem().clientHeight * 0.35 ? pergunta : el);
-  }
-  else avisarSeFora(el, 'Revisão pronta');
+  else rolarParaPergunta(m.turno, el);
   atualizarMenu();
   return el;
+}
+
+/** A pergunta curta fica no alto e a resposta embaixo dela; a longa, a própria resposta no alto. */
+function rolarParaPergunta(turno, el) {
+  const pergunta = $('conversa').querySelector(`.msg-pergunta[data-turno="${CSS.escape(turno)}"]`);
+  rolarAte(pergunta && pergunta.getBoundingClientRect().height < rolagem().clientHeight * 0.35 ? pergunta : el);
 }
 
 function avisoNaConversa(opcoes, acoes = {}, { rolar = true } = {}) {
@@ -274,22 +300,49 @@ function rolarAte(el) {
   });
 }
 
-/** Se a revisão chegou fora da vista, mostra "Revisão pronta" em vez de puxar a tela. */
-function avisarSeFora(el, texto) {
+/* O botão redondo acima da caixa de pergunta: "Ir para o fim" quando a conversa
+   ficou para baixo; quando a revisão chega fora da vista, leva até ela e mostra
+   um ponto (cinza enquanto chega, na cor do veredito quando fica pronta). */
+let _alvoIrFim = null;   // () => elemento da revisão, ou null
+
+const abaixoDaVista = el => el.getBoundingClientRect().top > rolagem().getBoundingClientRect().bottom - 40;
+
+function mostrarIrFim({ texto = 'Ir para o fim', alvo = null, veredito = '' } = {}) {
+  const b = $('btnIrFim');
+  _alvoIrFim = alvo;
+  $('irFimTexto').textContent = texto;
+  b.title = texto;
+  b.classList.toggle('com-revisao', !!alvo);
+  if (veredito) b.dataset.veredito = veredito; else delete b.dataset.veredito;
+  b.hidden = false;
+}
+
+function esconderIrFim() {
+  $('btnIrFim').hidden = true;
+  _alvoIrFim = null;
+}
+
+function irAoFim() {
+  const alvo = _alvoIrFim?.();
+  esconderIrFim();
+  if (alvo?.isConnected) rolarAte(alvo); else rolarParaFim();
+}
+
+/** A revisão chegando ou pronta fora da vista: o botão avisa, em vez de puxar a tela. */
+function avisarSeFora(el, veredito = '') {
+  const pegar = typeof el === 'function' ? el : () => el;
   requestAnimationFrame(() => {
-    const r = rolagem().getBoundingClientRect();
-    const b = el.getBoundingClientRect();
-    if (b.top > r.bottom - 40) mostrarIrFim(texto);
+    const alvo = pegar();
+    if (!alvo?.isConnected || !abaixoDaVista(alvo)) { if (_alvoIrFim) esconderIrFim(); return; }
+    const texto = veredito ? `Revisão pronta: ${VEREDITOS[veredito]}. Ir até ela` : 'A revisão está chegando. Ir até ela';
+    mostrarIrFim({ texto, alvo: pegar, veredito });
   });
 }
 
-function mostrarIrFim(texto = 'Ir para o fim') {
-  $('irFimTexto').textContent = texto;
-  $('btnIrFim').hidden = false;
-}
-
 function aoRolar() {
-  if (pertoDoFim()) $('btnIrFim').hidden = true;
+  const alvo = _alvoIrFim?.();
+  if (alvo) { if (!alvo.isConnected || !abaixoDaVista(alvo)) esconderIrFim(); return; }
+  if (pertoDoFim()) esconderIrFim();
   else if ($('btnIrFim').hidden && rolagem().scrollHeight > rolagem().clientHeight * 1.5) mostrarIrFim();
 }
 
@@ -377,22 +430,22 @@ async function rodarTurno(pergunta, { outra = null, soRevisao = null } = {}) {
         toast('Esta pergunta tem imagem: quem responde é o ChatGPT.');
       }
       const texto = await etapa(respondente, 'resposta', pergunta, cadeia,
-        () => pedirResposta(respondente, pergunta, anexo, outra, cadeia.signal));
+        aoParcial => pedirResposta(respondente, pergunta, anexo, outra, cadeia.signal, aoParcial));
       if (texto == null) return;
       resposta = { id: novoId(), turno: pergunta.id, papel: 'resposta', autor: respondente, texto, em: agoraIso() };
       if (respondente === 'chatgpt') resposta.modelo = estado.prefs.modelo;
-      adicionarMensagem(resposta);
+      adicionarMensagem(resposta, { rolar: false });
       salvar();
       anunciar(`O ${nomeDaIA(respondente)} respondeu.`);
     }
 
     const revisor = resposta.autor === 'deepseek' ? 'chatgpt' : 'deepseek';
     const textoRev = await etapa(revisor, 'revisao', pergunta, cadeia,
-      () => pedirRevisao(revisor, pergunta, resposta, anexo, cadeia.signal), resposta);
+      aoParcial => pedirRevisao(revisor, pergunta, resposta, anexo, cadeia.signal, aoParcial), resposta);
     if (textoRev == null) return;
     const revisao = { id: novoId(), turno: pergunta.id, papel: 'revisao', autor: revisor, texto: textoRev, em: agoraIso() };
     if (revisor === 'chatgpt') revisao.modelo = estado.prefs.modelo;
-    adicionarMensagem(revisao);
+    adicionarMensagem(revisao, { rolar: false });
     salvar();
     const { veredito } = lerRevisao(textoRev);
     anunciar(`Revisão do ${nomeDaIA(revisor)} pronta${veredito ? `: ${VEREDITOS[veredito]}` : ''}.`);
@@ -402,23 +455,58 @@ async function rodarTurno(pergunta, { outra = null, soRevisao = null } = {}) {
   }
 }
 
-/** Uma chamada com o "está respondendo…" na tela. Devolve null se falhou ou parou. */
+/**
+ * Uma chamada, com a espera na tela: primeiro o "está respondendo…"; quando o
+ * texto começa a chegar, a própria mensagem, redesenhada uma vez por quadro.
+ * Devolve o texto inteiro, ou null se falhou ou parou. Se a resposta parou no
+ * meio, o que chegou fica na conversa, marcado; a revisão pela metade não fica.
+ * @param {(aoParcial: (texto: string) => void) => Promise<string>} fn
+ */
 async function etapa(ia, papel, pergunta, cadeia, fn, resposta = null) {
+  const turno = pergunta.id;
+  const antigo = turno !== ultimoTurno();
   const pensando = elementoPensando(ia, papel);
-  pensando.dataset.turno = pergunta.id;
-  inserirNoTurno(pensando, pergunta.id);
-  if (pergunta.id !== ultimoTurno()) rolarAte(pensando);
+  pensando.dataset.turno = turno;
+  inserirNoTurno(pensando, turno);
+  mostrarStatus(ia, papel);
+  if (antigo) rolarAte(pensando);
   else if (papel === 'resposta' || pertoDoFim()) rolarParaFim();
+  const revisada = papel === 'revisao' ? $('conversa').querySelector(`.msg-resposta[data-turno="${CSS.escape(turno)}"]`) : null;
+  revisada?.classList.add('em-revisao');
+
+  let vivo = null, parcial = '', quadro = 0;
+  const desenhar = () => {
+    quadro = 0;
+    // a revisão entra linha a linha: meia linha viraria um título ou um veredito pela metade
+    const texto = papel === 'revisao' ? parcial.slice(0, parcial.lastIndexOf('\n') + 1) : parcial;
+    if (!texto.trim()) return;
+    const m = { id: `escrevendo-${turno}`, turno, papel, autor: ia, texto, escrevendo: true };
+    if (vivo) {
+      vivo = atualizarMensagem(vivo, m);
+      if (papel === 'resposta' && !antigo) aoRolar();   // o texto passou do fim da tela: aparece o botão de descer
+      return;
+    }
+    vivo = elementoMensagem(m);
+    pensando.replaceWith(vivo);
+    if (antigo) return;
+    if (papel === 'resposta') rolarParaPergunta(turno, vivo);
+    else avisarSeFora(() => vivo);
+  };
+  const aoParcial = texto => { parcial = texto; quadro ||= requestAnimationFrame(desenhar); };
+
   try {
-    return await fn();
+    return await fn(aoParcial);
   } catch (e) {
-    const turno = pergunta.id;
-    if (ehCancelamento(e) || cadeia.cancelled) {
+    const parou = ehCancelamento(e) || cadeia.cancelled;
+    const ficou = papel === 'resposta' && parcial.trim() ? guardarInterrompida(ia, turno, parcial) : null;
+    const repetir = ficou ? () => refazerTurno(pergunta) : () => rodarTurno(pergunta, { soRevisao: resposta });
+    if (parou) {
       avisoNaConversa({
         tipo: 'info', turno,
         titulo: papel === 'resposta' ? 'Você parou a resposta' : 'Você parou a revisão',
+        texto: ficou ? 'O que já tinha chegado ficou acima, sem revisão.' : '',
         acoes: [{ rotulo: papel === 'resposta' ? 'Perguntar de novo' : 'Revisar agora', acao: 'repetir', principal: true }],
-      }, { repetir: () => rodarTurno(pergunta, { soRevisao: resposta }) });
+      }, { repetir });
       return null;
     }
     const exp = explicarErro(e, ia);
@@ -426,14 +514,27 @@ async function etapa(ia, papel, pergunta, cadeia, fn, resposta = null) {
     if (exp.chaves) acoes.push({ rotulo: 'Revisar as chaves', acao: 'chaves' });
     avisoNaConversa({
       tipo: 'erro', turno,
-      titulo: papel === 'resposta' ? exp.titulo : `A resposta acima não foi revisada. ${exp.titulo}.`,
-      texto: exp.texto, acoes,
-    }, { repetir: () => rodarTurno(pergunta, { soRevisao: resposta }), chaves: () => abrirAjustes('#ajDeepseek') });
+      titulo: papel === 'resposta' ? (ficou ? `${exp.titulo} no meio da resposta` : exp.titulo)
+                                   : `A resposta acima não foi revisada. ${exp.titulo}.`,
+      texto: ficou ? 'O que já tinha chegado ficou acima, sem revisão.' : exp.texto, acoes,
+    }, { repetir, chaves: () => abrirAjustes('#ajDeepseek') });
     if (!(e instanceof ErroApi)) window.deepchatRegistrarErro?.('fluxo', e?.message || String(e), e?.stack);
     return null;
   } finally {
+    cancelAnimationFrame(quadro);
     pensando.remove();
+    vivo?.remove();
+    revisada?.classList.remove('em-revisao');
   }
+}
+
+/** Resposta que parou no meio: fica na conversa, marcada, e não vai para a revisão. */
+function guardarInterrompida(ia, turno, texto) {
+  const m = { id: novoId(), turno, papel: 'resposta', autor: ia, texto, em: agoraIso(), interrompida: true };
+  if (ia === 'chatgpt') m.modelo = estado.prefs.modelo;
+  adicionarMensagem(m, { rolar: false });
+  salvar();
+  return m;
 }
 
 function explicarErro(e, ia) {
@@ -450,11 +551,8 @@ function explicarErro(e, ia) {
   }
 }
 
-async function pedirResposta(ia, pergunta, anexo, outra, signal) {
-  if (estado.demo) {
-    await esperarDemo(1500, signal);
-    return exemploDaPergunta(pergunta.texto).resposta;
-  }
+async function pedirResposta(ia, pergunta, anexo, outra, signal, aoParcial) {
+  if (estado.demo) return escreverDemo(exemploDaPergunta(pergunta.texto).resposta, aoParcial, signal);
   const anteriores = antesDoTurno(pergunta.turno);
   let sistema = SISTEMA_RESPOSTA;
   if (outra) sistema += `\n\nO usuário pediu outra resposta. Responda de outro jeito; a anterior começava assim: "${resumir(outra, 300)}"`;
@@ -465,14 +563,11 @@ async function pedirResposta(ia, pergunta, anexo, outra, signal) {
     ...contextoParaApi(anteriores, CONFIG.MAX_CONTEXTO),
     { role: 'user', content: conteudoComAnexo(textoUsuario, anexo) },
   ];
-  return consultar(ia, mensagens, { chave: estado.chaves[ia], modelo: estado.prefs.modelo, temperatura: outra ? 0.9 : 0.7, signal });
+  return consultar(ia, mensagens, { chave: estado.chaves[ia], modelo: estado.prefs.modelo, temperatura: outra ? 0.9 : 0.7, signal, aoParcial });
 }
 
-async function pedirRevisao(ia, pergunta, resposta, anexo, signal) {
-  if (estado.demo) {
-    await esperarDemo(1300, signal);
-    return exemploDaPergunta(pergunta.texto).revisao;
-  }
+async function pedirRevisao(ia, pergunta, resposta, anexo, signal, aoParcial) {
+  if (estado.demo) return escreverDemo(exemploDaPergunta(pergunta.texto).revisao, aoParcial, signal, { antes: 700 });
   const anteriores = antesDoTurno(pergunta.turno);
   const veImagem = ia === 'chatgpt';
   const prompt = promptRevisao({
@@ -484,7 +579,7 @@ async function pedirRevisao(ia, pergunta, resposta, anexo, signal) {
   });
   const conteudo = anexo?.imagem && veImagem ? conteudoComAnexo(prompt, anexo) : prompt;
   return consultar(ia, [{ role: 'system', content: SISTEMA_REVISAO }, { role: 'user', content: conteudo }],
-    { chave: estado.chaves[ia], modelo: estado.prefs.modelo, temperatura: 0.3, signal });
+    { chave: estado.chaves[ia], modelo: estado.prefs.modelo, temperatura: 0.3, signal, aoParcial });
 }
 
 function definirOcupado(cadeia) {
@@ -495,10 +590,44 @@ function definirOcupado(cadeia) {
   b.innerHTML = cadeia ? ICONE.parar : ICONE.enviar;
   b.setAttribute('aria-label', cadeia ? 'Parar' : 'Enviar pergunta');
   b.title = cadeia ? 'Parar (Esc)' : '';
+  if (!cadeia) atualizarOrdem();   // tira o status e volta a mostrar a ordem
   aoDigitar();
 }
 
+/* Enquanto uma IA trabalha, o botão da ordem vira o status dela, com o tempo:
+   fica sempre à vista, mesmo com a conversa rolada para cima. */
+let _timerStatus;
+function mostrarStatus(ia, papel) {
+  const b = $('btnOrdem');
+  const acao = papel === 'revisao' ? 'revisando' : 'respondendo';
+  clearInterval(_timerStatus);
+  b.classList.add('status');
+  b.setAttribute('aria-disabled', 'true');
+  b.title = '';
+  b.setAttribute('aria-label', `${nomeDaIA(ia)} ${acao}`);
+  b.innerHTML = `<span class="ordem-ia" data-ia="${ia}">${nomeDaIA(ia)}</span><span class="status-acao">${acao}<span class="status-tempo"></span></span>`;
+  const tempo = b.querySelector('.status-tempo'), inicio = Date.now();
+  _timerStatus = setInterval(() => {
+    const s = Math.floor((Date.now() - inicio) / 1000);
+    tempo.textContent = s >= 1 ? ` · ${s} s` : '';
+  }, 1000);
+}
+
 function parar() { estado.cadeia?.cancel(); }
+
+/** Tira do turno tudo o que não é a pergunta (resposta, revisão, avisos). */
+function limparTurno(turno) {
+  estado.conversa.mensagens = estado.conversa.mensagens.filter(m => m.turno !== turno || m.papel === 'pergunta');
+  $('conversa').querySelectorAll(`[data-turno="${CSS.escape(turno)}"]:not(.msg-pergunta)`).forEach(el => el.remove());
+  salvar();   // o histórico não pode guardar a resposta que o usuário descartou
+}
+
+/** A resposta parou no meio: sai, e a pergunta vai de novo. */
+function refazerTurno(pergunta) {
+  if (estado.ocupado) return;
+  limparTurno(pergunta.turno);
+  rodarTurno(pergunta);
+}
 
 /** Tira a resposta e a revisão do último turno e pede de novo. */
 function outraResposta(turno) {
@@ -507,9 +636,7 @@ function outraResposta(turno) {
   const pergunta = msgs.find(m => m.id === turno);
   const antiga = msgs.find(m => m.turno === turno && m.papel === 'resposta');
   if (!pergunta) return;
-  estado.conversa.mensagens = msgs.filter(m => m.turno !== turno || m.papel === 'pergunta');
-  $('conversa').querySelectorAll(`[data-turno="${CSS.escape(turno)}"]:not(.msg-pergunta)`).forEach(el => el.remove());
-  salvar();   // o histórico não pode guardar a resposta que o usuário descartou
+  limparTurno(turno);
   rodarTurno(pergunta, { outra: antiga?.texto || '' });
 }
 
@@ -616,6 +743,11 @@ async function anexar(arquivo) {
 function atualizarOrdem() {
   const { respondente, revisor } = papeis();
   const b = $('btnOrdem');
+  if (estado.ocupado) return;   // durante a pergunta, o botão é o status; a ordem volta no fim
+  clearInterval(_timerStatus);
+  b.classList.remove('status');
+  b.removeAttribute('aria-disabled');
+  b.title = 'Trocar quem responde e quem revisa';
   b.innerHTML =
     `<span class="ordem-ia" data-ia="${respondente}">${nomeDaIA(respondente)}</span><span class="ordem-papel">responde</span>` +
     `<span class="ordem-sep" aria-hidden="true"></span>` +
@@ -654,7 +786,7 @@ function novaConversa({ focar = true } = {}) {
   desenharConversa();
   renderizarLista();
   fecharLateral();
-  $('btnIrFim').hidden = true;
+  esconderIrFim();
   rolagem().scrollTop = 0;
   if (focar) $('pergunta').focus();
 }
@@ -671,7 +803,7 @@ function carregarConversa(id, { rolar = 'fim' } = {}) {
   if (ultimaResposta && ultimaResposta.autor !== papeis().respondente) definirOrdem(ultimaResposta.autor, { silencioso: true });
   renderizarLista();
   fecharLateral();
-  $('btnIrFim').hidden = true;
+  esconderIrFim();
   requestAnimationFrame(() => {
     const perguntas = $('conversa').querySelectorAll('.msg-pergunta');
     const ultima = perguntas[perguntas.length - 1];
@@ -961,7 +1093,8 @@ function ligarEventos() {
   $('arquivo').addEventListener('change', e => { anexar(e.target.files[0]); e.target.value = ''; });
   $('btnTirarAnexo').addEventListener('click', () => { tirarAnexo(); campo.focus(); });
   $('btnTirarCitacao').addEventListener('click', () => { tirarCitacao(); campo.focus(); });
-  $('btnOrdem').addEventListener('click', () => definirOrdem(papeis().respondente === 'deepseek' ? 'chatgpt' : 'deepseek'));
+  // durante uma pergunta o botão mostra o status (a ordem vale para a próxima)
+  $('btnOrdem').addEventListener('click', () => { if (!estado.ocupado) definirOrdem(papeis().respondente === 'deepseek' ? 'chatgpt' : 'deepseek'); });
   const principal = $('principal');
   principal.addEventListener('dragover', e => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); principal.classList.add('soltando'); } });
   principal.addEventListener('dragleave', e => { if (!principal.contains(e.relatedTarget)) principal.classList.remove('soltando'); });
@@ -993,7 +1126,7 @@ function ligarEventos() {
     }
   });
   rolagem().addEventListener('scroll', aoRolar, { passive: true });
-  $('btnIrFim').addEventListener('click', () => { $('btnIrFim').hidden = true; rolarParaFim(); });
+  $('btnIrFim').addEventListener('click', irAoFim);
 
   // Lateral
   $('btnNova').addEventListener('click', () => novaConversa());
