@@ -215,7 +215,7 @@ export function elementoMensagem(m) {
     el.className = `rev-sec rev-${s.chave}`;
     el.innerHTML = s.chave === 'versao'
       ? `<summary><span>Ver a versão revisada</span></summary><div class="md"></div>`
-      : `<h3 class="rev-sec-titulo">${s.titulo}</h3><div class="md"></div>`;
+      : `<h2 class="rev-sec-titulo">${s.titulo}</h2><div class="md"></div>`;
     preencherMarkdown(el.querySelector('.md'), s.corpo, `${m.id}:${s.chave}`);
     return el;
   };

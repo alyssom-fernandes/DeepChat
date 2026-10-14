@@ -335,6 +335,7 @@ async function enviar({ texto: forcado, repetir = false } = {}) {
   if (forcado === undefined) { campo.value = ''; arm.apagarRascunho(); }
   tirarCitacao(); tirarAnexo(); aoDigitar();
   adicionarMensagem(pergunta);
+  if (estado.demo) tirarRepetidaDaDemo(pergunta.texto);
 
   if (estado.demo && !exemploDaPergunta(pergunta.texto)) {
     avisoDemo(id);
@@ -343,6 +344,15 @@ async function enviar({ texto: forcado, repetir = false } = {}) {
   }
   salvar();
   await rodarTurno(pergunta);
+}
+
+/* Na demonstração, o exemplo escolhido numa conversa nova já existe entre as
+   conversas gravadas: a gravada sai, e a nova fica no lugar, sem título repetido. */
+function tirarRepetidaDaDemo(texto) {
+  if (estado.conversa.mensagens.length > 1) return;
+  for (const c of arm.lerHistorico()) {
+    if (c.id !== estado.conversa.id && normalizar(c.mensagens[0]?.texto) === normalizar(texto)) arm.excluirConversa(c.id);
+  }
 }
 
 /**
@@ -616,13 +626,13 @@ function atualizarOrdem() {
   document.querySelectorAll('#dlgAjustes input[name="ordem"]').forEach(r => { r.checked = r.value === respondente; });
 }
 
-function definirOrdem(respondente) {
+function definirOrdem(respondente, { silencioso = false } = {}) {
   if (estado.prefs.ordem === respondente) return;
   estado.prefs.ordem = respondente;
   arm.salvarPreferencias(estado.prefs);
   atualizarOrdem();
   const { revisor } = papeis();
-  anunciar(`Agora o ${nomeDaIA(respondente)} responde e o ${nomeDaIA(revisor)} revisa.`);
+  if (!silencioso) anunciar(`Agora o ${nomeDaIA(respondente)} responde e o ${nomeDaIA(revisor)} revisa.`);
   if (estado.anexo?.imagem && respondente === 'deepseek') {
     tirarAnexo();
     toast('A imagem saiu: o DeepSeek não lê imagens.');
@@ -656,6 +666,9 @@ function carregarConversa(id, { rolar = 'fim' } = {}) {
   estado.conversa = structuredClone(c);
   tirarCitacao();
   desenharConversa();
+  // a caixa de pergunta segue a ordem da conversa aberta: quem respondeu por último responde a próxima
+  const ultimaResposta = estado.conversa.mensagens.findLast(m => m.papel === 'resposta');
+  if (ultimaResposta && ultimaResposta.autor !== papeis().respondente) definirOrdem(ultimaResposta.autor, { silencioso: true });
   renderizarLista();
   fecharLateral();
   $('btnIrFim').hidden = true;
