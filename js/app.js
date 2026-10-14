@@ -196,8 +196,17 @@ function marcarRevisadas() {
   const col = $('conversa');
   col.querySelectorAll('.msg-resposta').forEach(r => {
     const rev = col.querySelector(`.msg-revisao[data-turno="${CSS.escape(r.dataset.turno)}"]:not(.escrevendo)`);
-    if (rev?.dataset.veredito) r.dataset.veredito = rev.dataset.veredito;
-    else delete r.dataset.veredito;
+    const veredito = rev?.dataset.veredito;
+    let legenda = r.querySelector('.msg-veredito');
+    if (!veredito) { delete r.dataset.veredito; legenda?.remove(); return; }
+    r.dataset.veredito = veredito;
+    // a marca ganha legenda no cabeçalho: "revisão: Correta", mesmo com o cartão fora da vista
+    if (!legenda) {
+      legenda = document.createElement('span');
+      legenda.className = 'msg-veredito';
+      r.querySelector('.msg-cab').append(legenda);
+    }
+    legenda.replaceChildren('revisão: ', Object.assign(document.createElement('strong'), { textContent: VEREDITOS[veredito] }));
   });
 }
 
@@ -798,9 +807,13 @@ function carregarConversa(id, { rolar = 'fim' } = {}) {
   estado.conversa = structuredClone(c);
   tirarCitacao();
   desenharConversa();
-  // a caixa de pergunta segue a ordem da conversa aberta: quem respondeu por último responde a próxima
-  const ultimaResposta = estado.conversa.mensagens.findLast(m => m.papel === 'resposta');
-  if (ultimaResposta && ultimaResposta.autor !== papeis().respondente) definirOrdem(ultimaResposta.autor, { silencioso: true });
+  // A caixa de pergunta segue a ordem da conversa aberta: quem respondeu por último responde a
+  // próxima. Turno com imagem não conta (o ChatGPT responde à força), e a imagem já anexada fica.
+  const msgs = estado.conversa.mensagens;
+  const comImagem = r => msgs.find(p => p.id === r.turno)?.anexo?.imagem;
+  const ultimaResposta = msgs.findLast(m => m.papel === 'resposta' && !comImagem(m));
+  const tiraImagem = estado.anexo?.imagem && ultimaResposta?.autor === 'deepseek';
+  if (ultimaResposta && ultimaResposta.autor !== papeis().respondente && !tiraImagem) definirOrdem(ultimaResposta.autor, { silencioso: true });
   renderizarLista();
   fecharLateral();
   esconderIrFim();

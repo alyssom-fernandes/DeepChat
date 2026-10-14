@@ -7,8 +7,8 @@
      conteúdo exato). Mudou um deles, o hash muda: tests/csp.test.mjs aponta qual. -->
 <meta http-equiv="Content-Security-Policy"
   content="default-src 'none';
-           script-src 'sha256-5wqEJPbCLiex/287FlQcCssvFDHVUSaj9VJ8bajIwSI=' 'sha256-j0VrvT/u3nbn7XwDIdbeUXeLsBoxDhsKGiapRbzqSvk=';
-           style-src 'sha256-ODkfKvF9WM7YDVPtMPQUax6r2vyrjEaA3OEoyN1Pnn8=';
+           script-src 'sha256-RWXME0uRjVVPQNvGmOO9Yg0MXOHQVTQomrHpCT1PC+w=' 'sha256-j0VrvT/u3nbn7XwDIdbeUXeLsBoxDhsKGiapRbzqSvk=';
+           style-src 'sha256-MsqpVVh3a8/l7gI7VJCcCgWxdDn5bF/jPGyThRBihys=';
            font-src 'self';
            img-src data:;
            base-uri 'none';
@@ -26,14 +26,20 @@
     try { t = localStorage.getItem('dc_tema'); } catch (e) {}
     if (t !== 'claro' && t !== 'escuro') t = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'claro' : 'escuro';
     document.documentElement.setAttribute('data-tema', t);
+    // As fontes do próprio site. A 404 aparece em qualquer caminho: no GitHub
+    // Pages o app fica em /DeepChat/; num servidor local, na raiz.
+    var base = /\.github\.io$/.test(location.hostname) ? '/DeepChat/fonts/' : '/fonts/';
+    try {
+      [['Instrument Sans', 'instrument-sans-latin.woff2', { weight: '400 700', stretch: '85% 100%' }],
+       ['JetBrains Mono', 'jetbrains-mono-latin.woff2', { weight: '400 700' }]].forEach(function (f) {
+        var fonte = new FontFace(f[0], 'url(' + base + f[1] + ') format("woff2")', f[2]);
+        document.fonts.add(fonte);
+        fonte.load().catch(function () {});
+      });
+    } catch (e) { /* sem FontFace: fica a fonte do sistema */ }
   })();
 </script>
 <style>
-  /* as fontes do próprio site; o endereço é absoluto porque a 404 aparece em qualquer caminho */
-  @font-face { font-family: 'Instrument Sans'; font-weight: 400 700; font-stretch: 85% 100%; font-display: swap;
-               src: url('/DeepChat/fonts/instrument-sans-latin.woff2') format('woff2'); }
-  @font-face { font-family: 'JetBrains Mono'; font-weight: 400 700; font-display: swap;
-               src: url('/DeepChat/fonts/jetbrains-mono-latin.woff2') format('woff2'); }
   :root { --fundo: #141416; --borda: #2a2a30; --texto: #ededef; --fraco: #a9a9b3; --apagado: #8a8a94; --tinta: #ededef; --sobre-tinta: #141416;
           --ds: #8ea2ff; --gpt: #45d3a2; --foco: #8ea2ff; --pf-afn: #c44a5a; --pf-sys: rgba(255,255,255,.32); color-scheme: dark; }
   [data-tema="claro"] { --fundo: #ffffff; --borda: #e5e5e9; --texto: #18181b; --fraco: #52525b; --apagado: #6b6b75; --tinta: #18181b; --sobre-tinta: #fff;

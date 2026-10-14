@@ -100,7 +100,7 @@
   --ds-fundo: rgba(54, 81, 212, .09);
   --gpt: #08795a;
   --gpt-fundo: rgba(8, 121, 90, .09);
-  --ok: #13804f;       --ok-fundo: #e8f6ee;
+  --ok: #0f7046;       --ok-fundo: #e8f6ee;   /* 4,5:1 também sobre o cabeçalho tingido */
   --parcial: #9a5800;  --parcial-fundo: #fcf1dd;
   --erro: #c4302b;     --erro-fundo: #fdeeed;
   --foco: #3651d4;
@@ -424,10 +424,12 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
   border-bottom: 1px solid var(--borda);
 }
 .barra-titulo { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* sem caixinha nem cor própria: na tela, a cor forte é a do veredito */
 .selo-demo {
-  flex-shrink: 0; font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 7px;
-  color: var(--parcial); background: var(--parcial-fundo);
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 500; color: var(--texto-2);
 }
+.selo-demo::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--texto-3); }
 .menu-caixa { position: relative; flex-shrink: 0; }
 .menu {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
@@ -483,9 +485,13 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 .exemplo:hover .ic { transform: translateX(2px); color: var(--texto); }
 
 .msg { margin-bottom: 30px; }
-.msg-cab { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; min-width: 0; }
+.msg-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin-bottom: 8px; font-size: 13px; min-width: 0; }
 .msg-autor { font-weight: 600; }
 .msg-meta { color: var(--texto-3); }
+/* legenda da marca na margem: vale mesmo com a revisão fora da vista */
+.msg-veredito { color: var(--texto-3); }
+.msg-veredito::before { content: '·'; margin-right: 8px; }
+.msg-veredito strong { color: var(--cor-v); font-weight: 600; }
 
 .msg-pergunta { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 26px; }
 .balao {
@@ -517,7 +523,7 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
   transition: transform .5s cubic-bezier(.2, .7, .2, 1), background-color .45s;
 }
 .msg-resposta[data-veredito] > .md::before { transform: none; }
-.msg-resposta.em-revisao > .md::before { transform: none; background-color: var(--borda-2); animation: tracar 1.6s cubic-bezier(.2, .7, .2, 1) both; }
+.msg-resposta.em-revisao > .md::before { transform: none; background-color: var(--texto-3); animation: tracar 1.6s cubic-bezier(.2, .7, .2, 1) both; }
 
 .msg-acoes { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 8px; opacity: 0; transition: opacity var(--dur); }
 .msg-pergunta .msg-acoes { margin-top: 4px; }
@@ -841,7 +847,7 @@ legend { padding: 0; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
   .coluna { padding: 22px 16px 16px; }
   .rodape-pergunta { padding: 0 10px max(10px, env(safe-area-inset-bottom)); }
   .ir-fim { right: 12px; }
-  .msg-resposta > .md::before { left: -10px; }
+  .msg-resposta > .md::before { left: -11px; width: 3px; }
   .toasts { left: 50%; }
 
   /* início no celular: título, prévia e demonstração na primeira tela; as chaves depois */
