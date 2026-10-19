@@ -346,7 +346,8 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 #formChaves { width: 100%; max-width: 384px; }
 #formChaves h2 { font-size: 22px; font-weight: 650; letter-spacing: -.015em; margin-bottom: 6px; }
 .form-ajuda { color: var(--texto-2); font-size: 14px; margin-bottom: 24px; }
-#formChaves .caixa { margin: -4px 0 12px; }
+#formChaves .caixa { margin: -4px 0 2px; }
+.dica-caixa { margin: 0 0 12px 28px; font-size: 12.5px; line-height: 1.4; color: var(--texto-3); }
 #btnComecar { margin-top: 6px; }
 .como { margin-top: 24px; border-top: 1px solid var(--borda); padding-top: 14px; font-size: 14px; }
 .como summary { cursor: pointer; color: var(--texto-2); font-weight: 500; list-style: none; display: flex; align-items: center; gap: 8px; min-height: 32px; }
@@ -493,7 +494,8 @@ select { appearance: none; padding-right: 36px; cursor: pointer;
 .msg-meta { color: var(--texto-3); }
 /* legenda da marca na margem: vale mesmo com a revisão fora da vista */
 .msg-veredito { color: var(--texto-3); }
-.msg-veredito::before { content: '·'; margin-right: 8px; }
+/* a legenda fica dentro do texto do .msg-meta: o ponto cola no que vem antes (espaço sem quebra) e, na quebra de linha, nunca abre a linha seguinte */
+.msg-veredito::before { content: '\00a0· '; }
 .msg-veredito strong { color: var(--cor-v); font-weight: 600; }
 
 .msg-pergunta { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 26px; }

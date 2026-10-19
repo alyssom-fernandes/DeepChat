@@ -6,7 +6,7 @@
 
 import { estado, papeis } from './state.js';
 import * as arm from './storage.js';
-import { CONFIG, RequestChain, consultar, ErroApi, ehCancelamento,
+import { CONFIG, RequestChain, consultar, ErroApi, ehCancelamento, explicarFalhaDeRede,
          conteudoComAnexo, anexoParaRevisor, reduzirImagem,
          EXTENSOES_TEXTO, TIPOS_IMAGEM } from './api-client.js';
 import { SISTEMA_RESPOSTA, SISTEMA_REVISAO, promptRevisao, nomeDaIA, lerRevisao, VEREDITOS } from './revisao.js';
@@ -39,12 +39,15 @@ async function iniciar() {
   if (new URLSearchParams(location.search).get('demo') === '1') { iniciarDemo(); return; }
   if (dentroDeOutroSite()) { mostrarQuadro(); return; }
 
-  const chaves = await arm.carregarChaves();
+  let chaves = null, avisoCofre = '';
+  try { chaves = await arm.carregarChaves(); }
+  catch (e) { avisoCofre = e.message; }   // há chaves salvas, mas não abriram: o usuário precisa saber
   if (chaves?.deepseekKey && chaves?.chatgptKey) {
     estado.chaves = { deepseek: chaves.deepseekKey, chatgpt: chaves.chatgptKey };
     abrirApp();
   } else {
     mostrarInicio();
+    if (avisoCofre) mostrarErro($('erroChaves'), avisoCofre);
   }
 }
 
@@ -119,10 +122,17 @@ async function entrar(e) {
   if (erroGpt) { $('chaveChatgpt').focus(); return; }
 
   estado.chaves = { deepseek: ds, chatgpt: gpt };
-  if ($('lembrarChaves').checked) await arm.salvarChaves(ds, gpt);
-  else arm.esquecerChaves();
+  let naoSalvou = false;
+  if ($('lembrarChaves').checked) {
+    try { await arm.salvarChaves(ds, gpt); }
+    catch (err) { naoSalvou = true; window.deepchatRegistrarErro?.('chaves', err?.message || String(err), err?.stack); }
+  } else {
+    await arm.esquecerChaves();
+  }
   $('chaveDeepseek').value = $('chaveChatgpt').value = '';
+  mostrarErro($('erroChaves'), '');
   abrirApp();
+  if (naoSalvou) toast('Não deu para salvar as chaves neste navegador. Elas valem até fechar ou recarregar a página.', { tipo: 'erro', duracao: 9000 });
 }
 
 // ── Conversa na tela ──────────────────────────────────────────────────────────
@@ -204,7 +214,7 @@ function marcarRevisadas() {
     if (!legenda) {
       legenda = document.createElement('span');
       legenda.className = 'msg-veredito';
-      r.querySelector('.msg-cab').append(legenda);
+      (r.querySelector('.msg-meta') || r.querySelector('.msg-cab')).append(legenda);
     }
     legenda.replaceChildren('revisão: ', Object.assign(document.createElement('strong'), { textContent: VEREDITOS[veredito] }));
   });
@@ -433,7 +443,7 @@ async function rodarTurno(pergunta, { outra = null, soRevisao = null } = {}) {
     if (!resposta) {
       // pergunta com imagem é sempre do ChatGPT (o DeepSeek não lê imagem),
       // mesmo se a ordem mudou antes de "Tentar de novo"
-      let respondente = papeis().respondente;
+      let respondente = (estado.demo && exemploDaPergunta(pergunta.texto)?.autores.respondeu) || papeis().respondente;
       if (anexo?.imagem && respondente === 'deepseek') {
         respondente = 'chatgpt';
         toast('Esta pergunta tem imagem: quem responde é o ChatGPT.');
@@ -551,8 +561,8 @@ function explicarErro(e, ia) {
   switch (e?.tipo) {
     case 'chave':    return { chaves: true, titulo: `A chave do ${nome} foi recusada`, texto: 'Confira se ela foi copiada inteira e se ainda está ativa no site do serviço.' };
     case 'cota':     return { titulo: `O ${nome} recusou por limite ou saldo`, texto: 'A conta pode estar sem créditos ou ter passado do limite de pedidos. Espere um pouco ou confira o saldo no site do serviço.' };
-    case 'tempo':    return { titulo: `O ${nome} demorou demais`, texto: 'Passou de 60 segundos sem resposta, mesmo tentando de novo.' };
-    case 'rede':     return { titulo: `Não deu para falar com o ${nome}`, texto: navigator.onLine ? 'A conexão falhou três vezes seguidas.' : 'Você está sem internet.' };
+    case 'tempo':    return { titulo: `O ${nome} demorou demais`, texto: explicarFalhaDeRede(e) };
+    case 'rede':     return { titulo: `Não deu para falar com o ${nome}`, texto: explicarFalhaDeRede(e, navigator.onLine) };
     case 'circuito': return { titulo: `O ${nome} falhou várias vezes seguidas`, texto: `Para não insistir à toa, o DeepChat espera ${e.segundos} s antes de tentar de novo.` };
     case 'servidor': return { titulo: `O ${nome} está com problemas`, texto: 'O serviço respondeu com erro. Costuma passar em poucos minutos.' };
     case 'pedido':   return { titulo: `O ${nome} não aceitou o pedido`, texto: resumir(e.message, 220) };
@@ -767,13 +777,18 @@ function atualizarOrdem() {
   document.querySelectorAll('#dlgAjustes input[name="ordem"]').forEach(r => { r.checked = r.value === respondente; });
 }
 
-function definirOrdem(respondente, { silencioso = false } = {}) {
-  if (estado.prefs.ordem === respondente) return;
-  estado.prefs.ordem = respondente;
-  arm.salvarPreferencias(estado.prefs);
+/** Escolha do usuário: vale daqui em diante e fica guardada (a ordem de uma conversa aberta não). */
+function definirOrdem(respondente) {
+  const antes = papeis().respondente;
+  estado.ordemConversa = null;
+  if (estado.prefs.ordem !== respondente) {
+    estado.prefs.ordem = respondente;
+    arm.salvarPreferencias(estado.prefs);
+  }
+  if (antes === respondente) return;
   atualizarOrdem();
   const { revisor } = papeis();
-  if (!silencioso) anunciar(`Agora o ${nomeDaIA(respondente)} responde e o ${nomeDaIA(revisor)} revisa.`);
+  anunciar(`Agora o ${nomeDaIA(respondente)} responde e o ${nomeDaIA(revisor)} revisa.`);
   if (estado.anexo?.imagem && respondente === 'deepseek') {
     tirarAnexo();
     toast('A imagem saiu: o DeepSeek não lê imagens.');
@@ -791,6 +806,7 @@ function ocupadoAvisa() {
 function novaConversa({ focar = true } = {}) {
   if (ocupadoAvisa()) return;
   estado.conversa = criarConversa();
+  if (estado.ordemConversa) { estado.ordemConversa = null; atualizarOrdem(); }
   tirarCitacao();
   desenharConversa();
   renderizarLista();
@@ -808,12 +824,14 @@ function carregarConversa(id, { rolar = 'fim' } = {}) {
   tirarCitacao();
   desenharConversa();
   // A caixa de pergunta segue a ordem da conversa aberta: quem respondeu por último responde a
-  // próxima. Turno com imagem não conta (o ChatGPT responde à força), e a imagem já anexada fica.
+  // próxima. Vale só enquanto ela está aberta e não mexe na preferência salva. Turno com imagem
+  // não conta (o ChatGPT responde à força), e a imagem já anexada fica.
   const msgs = estado.conversa.mensagens;
   const comImagem = r => msgs.find(p => p.id === r.turno)?.anexo?.imagem;
   const ultimaResposta = msgs.findLast(m => m.papel === 'resposta' && !comImagem(m));
   const tiraImagem = estado.anexo?.imagem && ultimaResposta?.autor === 'deepseek';
-  if (ultimaResposta && ultimaResposta.autor !== papeis().respondente && !tiraImagem) definirOrdem(ultimaResposta.autor, { silencioso: true });
+  estado.ordemConversa = ultimaResposta && !tiraImagem && ultimaResposta.autor !== estado.prefs.ordem ? ultimaResposta.autor : null;
+  atualizarOrdem();
   renderizarLista();
   fecharLateral();
   esconderIrFim();
@@ -965,7 +983,7 @@ function abrirAjustes(foco) {
   $('ajChatgpt').value = estado.chaves.chatgpt;
   $('ajLembrar').checked = arm.temChavesSalvas();
   mostrarErro($('ajErroChaves'), '');
-  dlg.querySelectorAll('input[name="ordem"]').forEach(r => { r.checked = r.value === estado.prefs.ordem; });
+  dlg.querySelectorAll('input[name="ordem"]').forEach(r => { r.checked = r.value === papeis().respondente; });
   $('ajModelo').value = estado.prefs.modelo;
   const tema = window.deepchatTema?.preferencia() || 'sistema';
   dlg.querySelectorAll('input[name="tema"]').forEach(r => { r.checked = r.value === tema; });
@@ -982,8 +1000,13 @@ async function salvarChavesDosAjustes() {
   mostrarErro($('ajErroChaves'), erro);
   if (erro) return;
   estado.chaves = { deepseek: ds, chatgpt: gpt };
-  if ($('ajLembrar').checked) { await arm.salvarChaves(ds, gpt); toast('Chaves salvas neste navegador.'); }
-  else { arm.esquecerChaves(); toast('Chaves trocadas. Valem até recarregar ou fechar a página.'); }
+  if ($('ajLembrar').checked) {
+    try { await arm.salvarChaves(ds, gpt); toast('Chaves salvas neste navegador.'); }
+    catch (err) {
+      window.deepchatRegistrarErro?.('chaves', err?.message || String(err), err?.stack);
+      toast('Não deu para salvar as chaves neste navegador. Elas valem até fechar ou recarregar a página.', { tipo: 'erro', duracao: 9000 });
+    }
+  } else { await arm.esquecerChaves(); toast('Chaves trocadas. Valem até recarregar ou fechar a página.'); }
 }
 
 async function esquecerChavesDosAjustes() {
@@ -994,7 +1017,7 @@ async function esquecerChavesDosAjustes() {
     confirmar: 'Esquecer chaves', perigo: true,
   });
   if (!ok) return;
-  arm.esquecerChaves();
+  await arm.esquecerChaves();
   estado.chaves = { deepseek: '', chatgpt: '' };
   $('dlgAjustes').close();
   mostrarInicio();
