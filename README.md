@@ -126,14 +126,21 @@ Taken from the demo mode.
 - **No server.** Questions go from the browser straight to
   `api.deepseek.com` and `api.openai.com`. Each question is billed to your
   own account on each service.
-- **Keys.** With "Lembrar neste navegador" (Remember in this browser), they
-  are stored in `localStorage`, encrypted with AES-GCM (key derived with
-  PBKDF2, 100,000 iterations). The encryption password comes from the
-  browser itself: this keeps the keys unreadable in a backup or a quick
-  look at storage, but it does not protect against a script running on
-  this same page. Without the option, keys last until the page is reloaded
-  or closed.
-  Keys with a spending limit are a good idea.
+- **Keys.** "Lembrar neste navegador" (Remember in this browser) comes
+  unchecked: the keys last until the page is reloaded or closed. If you
+  check it, the keys are encrypted with AES-GCM using a random key that the
+  browser cannot export (a non-extractable `CryptoKey`, kept in IndexedDB);
+  only the encrypted text goes to `localStorage`. This keeps the keys
+  unreadable in a backup, a copy of the browser profile or a quick look at
+  storage. It does not protect against code running on this same origin:
+  that code cannot read the encryption key, but it can ask the browser to
+  decrypt with it. The origin `alyssom-fernandes.github.io` is shared with
+  other projects of the author, so only check the option on a computer that
+  is yours alone. If saved keys cannot be opened (for example, after the
+  site data was partly cleared), the app says so and asks you to paste them
+  again. Vaults saved by earlier versions, with a password derived from the
+  browser, are opened once and converted. Keys with a spending limit are a
+  good idea.
 - **AI content.** Markdown goes through DOMPurify; every outside text
   (question, file name, title) is escaped before it becomes HTML.
 - **Content Security Policy** without `'unsafe-inline'`, with connections
@@ -176,6 +183,10 @@ Some decisions behind it:
 - **The parts that decide what shows up are pure, tested functions**:
   review parsing (new and old format), history migration, the context sent
   to the APIs, Markdown export, search, dates and text helpers.
+- **The key vault is tested in Node.** With a fake `localStorage` and a fake
+  IndexedDB (and the real `crypto.subtle`), the tests cover encrypting and
+  decrypting, migration from the old format, failure to open and forgetting
+  the keys.
 - **Streaming is tested without a network.** A fake `fetch` delivers the
   answer in pieces, drops the connection midway and answers with errors;
   the tests check the assembled text, and when a retry happens and when it
@@ -191,6 +202,9 @@ Some decisions behind it:
   the demo works.
 - DeepSeek cannot read images. PDFs are not accepted: for a PDF, copy its
   text into a TXT file.
+- Saved keys depend on the encryption key kept in this browser. If the site
+  data is cleared in part (IndexedDB gone, `localStorage` kept), the keys
+  cannot be opened and you paste them again.
 - History stays in this browser only. Clearing the site's data erases it;
   to keep a conversation, export it as Markdown.
 - `marked` and DOMPurify come from a CDN. Without them, Markdown falls back

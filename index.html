@@ -122,7 +122,8 @@
         </div>
       </div>
 
-      <label class="caixa"><input type="checkbox" id="lembrarChaves" checked><span>Lembrar neste navegador</span></label>
+      <label class="caixa"><input type="checkbox" id="lembrarChaves" aria-describedby="dicaLembrar"><span>Lembrar neste navegador</span></label>
+      <p class="dica-caixa" id="dicaLembrar">Não marque em computador compartilhado: quem usar este navegador poderá usar suas chaves.</p>
       <p class="form-erro" id="erroChaves" role="alert" hidden></p>
 
       <button type="submit" class="btn btn-sec btn-largo" id="btnComecar">Começar</button>
@@ -130,7 +131,7 @@
       <details class="como">
         <summary>Quanto custa e como criar as chaves</summary>
         <div class="como-corpo">
-          <p>As duas APIs cobram por uso, direto na sua conta de cada serviço. Uma pergunta com revisão costuma custar menos de um centavo de dólar com o GPT-4o mini.</p>
+          <p>As duas APIs cobram por uso, direto na sua conta de cada serviço. Os preços atuais estão nas páginas de <a href="https://api-docs.deepseek.com/quick_start/pricing" target="_blank" rel="noopener noreferrer">preços do DeepSeek</a> e de <a href="https://openai.com/api/pricing/" target="_blank" rel="noopener noreferrer">preços da OpenAI</a>.</p>
           <ol>
             <li>No <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">DeepSeek</a>: crie a conta, adicione créditos e gere uma chave em <em>API Keys</em>.</li>
             <li>Na <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI</a>: crie a conta, adicione créditos em <em>Billing</em> e gere uma chave em <em>API keys</em>.</li>

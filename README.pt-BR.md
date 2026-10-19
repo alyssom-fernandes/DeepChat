@@ -122,12 +122,20 @@ Capturadas do modo demonstração.
 - **Sem servidor.** As perguntas vão do navegador direto para
   `api.deepseek.com` e `api.openai.com`. O custo de cada pergunta cai na
   sua conta de cada serviço.
-- **Chaves.** Com "Lembrar neste navegador", elas ficam no `localStorage`
-  cifradas com AES-GCM (chave derivada com PBKDF2, 100 mil iterações). A
-  senha da cifra vem do próprio navegador: isso evita que as chaves fiquem
-  legíveis num backup ou numa olhada no armazenamento, mas não protege
-  contra um script rodando nesta mesma página. Sem a opção, as chaves valem
-  só até recarregar ou fechar a página. Vale usar chaves com limite de gasto.
+- **Chaves.** "Lembrar neste navegador" vem desmarcado: as chaves valem só
+  até recarregar ou fechar a página. Se você marcar, elas são cifradas com
+  AES-GCM por uma chave aleatória que o navegador não deixa exportar (uma
+  `CryptoKey` não extraível, guardada no IndexedDB); só o texto cifrado vai
+  para o `localStorage`. Isso evita que as chaves fiquem legíveis num
+  backup, numa cópia do perfil do navegador ou numa olhada no armazenamento.
+  Não protege contra código rodando nesta mesma origem: ele não lê a chave
+  de cifra, mas pode pedir ao navegador que decifre com ela. A origem
+  `alyssom-fernandes.github.io` é compartilhada com outros projetos do
+  autor; por isso, só marque a opção num computador que seja só seu. Se as
+  chaves salvas não abrirem (por exemplo, depois de limpar parte dos dados
+  do site), o app avisa e pede para colar de novo. Cofres de versões
+  anteriores, com senha derivada do navegador, são abertos uma vez e
+  convertidos. Vale usar chaves com limite de gasto.
 - **Conteúdo das IAs.** O Markdown passa pelo DOMPurify; todo texto de fora
   (pergunta, nome de arquivo, título) é escapado antes de virar HTML.
 - **Content Security Policy** sem `'unsafe-inline'`, com conexões liberadas
@@ -170,6 +178,10 @@ Algumas decisões por trás dele:
 - **As partes que decidem o que aparece são funções puras e testadas**:
   leitura da revisão (formato novo e antigo), migração do histórico,
   contexto enviado às APIs, exportação em Markdown, busca, datas e textos.
+- **O cofre de chaves é testado em Node.** Com um `localStorage` e um
+  IndexedDB falsos (e o `crypto.subtle` de verdade), os testes cobrem cifrar
+  e decifrar, a migração do formato antigo, a falha de abertura e o
+  esquecimento das chaves.
 - **O stream é testado sem rede.** Um `fetch` falso entrega a resposta aos
   pedaços, corta a conexão no meio e responde com erro; os testes conferem
   o texto montado, quando há nova tentativa e quando não há.
@@ -183,6 +195,9 @@ Algumas decisões por trás dele:
   só a demonstração funciona.
 - O DeepSeek não lê imagens. PDF não é aceito: para um PDF, copie o texto
   para um arquivo TXT.
+- As chaves salvas dependem da chave de cifra guardada neste navegador. Se
+  os dados do site forem limpos em parte (IndexedDB apagado, `localStorage`
+  mantido), as chaves não abrem e você cola de novo.
 - O histórico fica só neste navegador. Limpar os dados do site apaga as
   conversas; para guardar uma, exporte em Markdown.
 - O `marked` e o DOMPurify vêm de CDN. Sem eles, o Markdown cai num formato
