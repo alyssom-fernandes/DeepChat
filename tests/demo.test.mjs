@@ -9,6 +9,18 @@ const conversa = id => conversasDemo().find(c => c.id === id);
 const blocosJs = texto => [...texto.matchAll(/```js\n([\s\S]*?)```/g)].map(m => m[1]);
 const funcao = codigo => new Function(`${codigo.replace(/^validarCPF\(.*$/gm, '')}\nreturn validarCPF;`)();
 
+test('cada exemplo traz o autor gravado, e a conversa de exemplo usa o mesmo', () => {
+  for (const c of conversasDemo()) {
+    const ex = exemploDaPergunta(c.titulo);
+    assert.ok(ex, c.titulo);
+    assert.deepEqual(ex.autores, {
+      respondeu: c.mensagens.find(m => m.papel === 'resposta').autor,
+      revisou: c.mensagens.find(m => m.papel === 'revisao').autor,
+    });
+    assert.notEqual(ex.autores.respondeu, ex.autores.revisou);
+  }
+});
+
 test('cada exemplo tem resposta e revisão no formato, com o veredito esperado', () => {
   const esperado = { demo_muralha: 'incorreta', demo_cpf: 'parcial', demo_juros: 'correta' };
   for (const c of conversasDemo()) {

@@ -6,6 +6,7 @@
  */
 
 const CPF = {
+  autores: { respondeu: 'chatgpt', revisou: 'deepseek' },
   pergunta: 'Escreva uma função em JavaScript que valide um CPF.',
   resposta: `Segue uma função que confere os dois dígitos verificadores:
 
@@ -81,6 +82,7 @@ validarCPF('111.111.111-11'); // false
 };
 
 const MURALHA = {
+  autores: { respondeu: 'deepseek', revisou: 'chatgpt' },
   pergunta: 'A Muralha da China dá para ver do espaço?',
   resposta: `Sim. A Grande Muralha da China é muitas vezes citada como a única construção humana visível a olho nu do espaço. Com mais de 21 mil quilômetros, ela pode ser vista da órbita da Terra e, segundo alguns relatos, até da Lua.
 
@@ -108,6 +110,7 @@ Não a olho nu. A Grande Muralha tem mais de 21 mil km, mas é estreita e da cor
 };
 
 const JUROS = {
+  autores: { respondeu: 'deepseek', revisou: 'chatgpt' },
   pergunta: 'Qual a diferença entre juros simples e compostos?',
   resposta: `A diferença está na base sobre a qual os juros são calculados.
 
@@ -146,7 +149,7 @@ export const PERGUNTAS_EXEMPLO = [MURALHA.pergunta, CPF.pergunta, JUROS.pergunta
 
 const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
-/** Resposta e revisão gravadas para uma pergunta de exemplo, ou null. */
+/** Resposta, revisão e autores (quem respondeu e quem revisou) gravados para uma pergunta de exemplo, ou null. */
 export function exemploDaPergunta(pergunta) {
   const p = norm(pergunta);
   return EXEMPLOS.find(e => norm(e.pergunta) === p) || null;
@@ -184,7 +187,8 @@ export async function escreverDemo(texto, aoParcial, signal, { antes = 900, pass
 /** Histórico da demonstração: três conversas, uma em cada grupo de data. */
 export function conversasDemo(agora = new Date()) {
   const menos = min => new Date(agora.getTime() - min * 60_000).toISOString();
-  const conversa = (id, ex, minutosAtras, respondeu, revisou) => {
+  const conversa = (id, ex, minutosAtras) => {
+    const { respondeu, revisou } = ex.autores;
     const t0 = menos(minutosAtras), t1 = menos(minutosAtras - 1), t2 = menos(minutosAtras - 2);
     const turno = `${id}_p`;
     return {
@@ -197,8 +201,8 @@ export function conversasDemo(agora = new Date()) {
     };
   };
   return [
-    conversa('demo_muralha', MURALHA, 18,        'deepseek', 'chatgpt'),
-    conversa('demo_cpf',     CPF,     60 * 26,   'chatgpt',  'deepseek'),
-    conversa('demo_juros',   JUROS,   60 * 24 * 3 + 40, 'deepseek', 'chatgpt'),
+    conversa('demo_muralha', MURALHA, 18),
+    conversa('demo_cpf',     CPF,     60 * 26),
+    conversa('demo_juros',   JUROS,   60 * 24 * 3 + 40),
   ];
 }
