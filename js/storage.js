@@ -2,29 +2,49 @@
  * storage.js — DeepChat
  * Tudo o que fica no navegador: chaves, preferências, histórico e rascunho.
  *
- * Sobre as chaves: elas são cifradas com AES-GCM, mas a senha da cifra é
- * derivada do próprio navegador (user agent, idioma e fuso, com um sal
- * aleatório). Isso evita que fiquem legíveis num backup ou numa olhada
- * rápida no localStorage; não protege contra um script rodando nesta mesma
- * página. Quem quiser mais cuidado pode desmarcar "Lembrar neste navegador".
+ * Sobre as chaves: elas são cifradas com AES-GCM por uma chave aleatória e
+ * não exportável (CryptoKey) guardada no IndexedDB; o texto cifrado fica no
+ * localStorage. Quem olha o localStorage, um backup ou um arquivo copiado do
+ * perfil só vê texto cifrado, e a chave de cifra não pode ser lida nem
+ * exportada. Mas ela não é um segredo contra o próprio site: qualquer script
+ * que rode nesta origem consegue pedir ao navegador para decifrar. Quem quiser
+ * mais cuidado pode deixar "Lembrar neste navegador" desmarcado.
+ *
+ * Formato antigo: a senha da cifra era derivada do user agent, do idioma e do
+ * fuso (PBKDF2 com um sal em dc_salt). Esse cofre é aberto uma vez, regravado
+ * no formato novo e o sal é apagado.
  *
  * Na demonstração nada é gravado: o histórico fica só na memória.
  */
 
 import { migrarConversa, ordenarHistorico } from './conversa.js';
 
-const SALT_KEY    = 'dc_salt';
+const SALT_KEY    = 'dc_salt';         // só no formato antigo
 const VAULT_KEY   = 'dc_vault';
 const PREFS_KEY   = 'dc_prefs';
 const HISTORY_KEY = 'dc_history';
 const DRAFT_KEY   = 'dc_draft';        // sessionStorage
 const LEGADO      = ['ds_api_key', 'gpt_api_key'];
 const MAX_CONVERSAS = 100;
+const VERSAO_COFRE  = 2;
+
+const IDB_NOME  = 'deepchat';
+const IDB_LOJA  = 'cofre';
+const IDB_CHAVE = 'chave-aes';
 
 let _memoria = null;   // histórico da demonstração
 
 export function usarMemoria(conversas) { _memoria = [...conversas]; }
 export const emMemoria = () => _memoria !== null;
+
+/** Há chaves salvas, mas não foi possível abri-las. */
+export class ErroCofre extends Error {
+  constructor(causa) {
+    super('Não deu para abrir as chaves salvas; cole de novo.');
+    this.name = 'ErroCofre';
+    this.causa = causa;
+  }
+}
 
 // ── Cifra ─────────────────────────────────────────────────────────────────────
 
@@ -33,7 +53,62 @@ const dec = buf => new TextDecoder().decode(buf);
 const bufToB64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const b64ToBuf = b64 => Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer;
 
-async function derivarChave(senha, sal) {
+// ── Chave de cifra no IndexedDB ───────────────────────────────────────────────
+
+const pedido = req => new Promise((ok, erro) => {
+  req.onsuccess = () => ok(req.result);
+  req.onerror   = () => erro(req.error);
+});
+
+function abrirBanco() {
+  return new Promise((ok, erro) => {
+    const req = indexedDB.open(IDB_NOME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(IDB_LOJA)) req.result.createObjectStore(IDB_LOJA);
+    };
+    req.onsuccess = () => ok(req.result);
+    req.onerror   = () => erro(req.error);
+    req.onblocked = () => erro(new Error('IndexedDB bloqueado'));
+  });
+}
+
+/** Roda `fn(loja)` numa transação e espera ela terminar. */
+async function comLoja(modo, fn) {
+  const banco = await abrirBanco();
+  try {
+    return await new Promise((ok, erro) => {
+      const tx = banco.transaction(IDB_LOJA, modo);
+      let resultado;
+      tx.oncomplete = () => ok(resultado);
+      tx.onerror = tx.onabort = () => erro(tx.error || new Error('Transação cancelada'));
+      Promise.resolve(fn(tx.objectStore(IDB_LOJA))).then(r => { resultado = r; }, erro);
+    });
+  } finally {
+    banco.close?.();
+  }
+}
+
+const lerChaveDeCifra = () => comLoja('readonly', loja => pedido(loja.get(IDB_CHAVE)));
+
+/** Devolve a chave de cifra; cria uma nova (não exportável) se ainda não existe. */
+async function obterOuCriarChaveDeCifra() {
+  const existente = await lerChaveDeCifra();
+  if (existente) return existente;
+  const nova = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  // Se outra aba criou uma enquanto isso, vale a que já está gravada.
+  return comLoja('readwrite', async loja => {
+    const outra = await pedido(loja.get(IDB_CHAVE));
+    if (outra) return outra;
+    await pedido(loja.put(nova, IDB_CHAVE));
+    return nova;
+  });
+}
+
+const apagarChaveDeCifra = () => comLoja('readwrite', loja => pedido(loja.delete(IDB_CHAVE)));
+
+// ── Formato antigo (senha derivada do navegador) ──────────────────────────────
+
+async function derivarChaveLegada(senha, sal) {
   const base = await crypto.subtle.importKey('raw', enc(senha), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
     { name: 'PBKDF2', salt: sal, iterations: 100_000, hash: 'SHA-256' },
@@ -41,49 +116,70 @@ async function derivarChave(senha, sal) {
   );
 }
 
-function salDoNavegador() {
-  let b64 = localStorage.getItem(SALT_KEY);
-  if (!b64) {
-    b64 = bufToB64(crypto.getRandomValues(new Uint8Array(16)).buffer);
-    localStorage.setItem(SALT_KEY, b64);
-  }
-  return new Uint8Array(b64ToBuf(b64));
-}
-
-const senhaDoNavegador = () =>
+const senhaLegada = () =>
   [navigator.userAgent, navigator.language, Intl.DateTimeFormat().resolvedOptions().timeZone].join('|');
 
-export async function salvarChaves(deepseekKey, chatgptKey) {
-  const chave  = await derivarChave(senhaDoNavegador(), salDoNavegador());
-  const iv     = crypto.getRandomValues(new Uint8Array(12));
-  const cifra  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, chave, enc(JSON.stringify({ deepseekKey, chatgptKey })));
-  localStorage.setItem(VAULT_KEY, JSON.stringify({ iv: bufToB64(iv.buffer), data: bufToB64(cifra) }));
+async function abrirCofreLegado({ iv, data }) {
+  const b64 = localStorage.getItem(SALT_KEY);
+  if (!b64) throw new Error('Sal do formato antigo ausente');
+  const chave = await derivarChaveLegada(senhaLegada(), new Uint8Array(b64ToBuf(b64)));
+  return decifrar(chave, iv, data);
 }
 
+// ── Cofre ─────────────────────────────────────────────────────────────────────
+
+async function decifrar(chave, iv, data) {
+  const plano = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(b64ToBuf(iv)) }, chave, b64ToBuf(data));
+  return JSON.parse(dec(plano));
+}
+
+/** Cifra as chaves e grava no localStorage. Rejeita se o navegador recusar (IndexedDB ou cota). */
+export async function salvarChaves(deepseekKey, chatgptKey) {
+  const chave = await obterOuCriarChaveDeCifra();
+  const iv    = crypto.getRandomValues(new Uint8Array(12));
+  const cifra = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, chave, enc(JSON.stringify({ deepseekKey, chatgptKey })));
+  localStorage.setItem(VAULT_KEY, JSON.stringify({ v: VERSAO_COFRE, iv: bufToB64(iv.buffer), data: bufToB64(cifra) }));
+  localStorage.removeItem(SALT_KEY);   // o sal só servia ao formato antigo
+}
+
+/**
+ * @returns {Promise<{deepseekKey: string, chatgptKey: string} | null>} null quando não há nada salvo.
+ * @throws {ErroCofre} quando há chaves salvas e elas não abrem.
+ */
 export async function carregarChaves() {
-  try {
-    // Formato antigo, em texto puro: passa para o cofre e apaga.
-    const [ds, gpt] = LEGADO.map(k => localStorage.getItem(k));
-    if (ds && gpt) {
+  // Formato muito antigo, em texto puro: passa para o cofre e apaga.
+  const [ds, gpt] = LEGADO.map(k => localStorage.getItem(k));
+  if (ds && gpt) {
+    try {
       await salvarChaves(ds, gpt);
       LEGADO.forEach(k => localStorage.removeItem(k));
-      return { deepseekKey: ds, chatgptKey: gpt };
+    } catch { /* não gravou: o texto puro fica onde estava e as chaves valem nesta sessão */ }
+    return { deepseekKey: ds, chatgptKey: gpt };
+  }
+  const raw = localStorage.getItem(VAULT_KEY);
+  if (!raw) return null;
+  try {
+    const cofre = JSON.parse(raw);
+    if (cofre.v === VERSAO_COFRE) {
+      const chave = await lerChaveDeCifra();
+      if (!chave) throw new Error('Chave de cifra ausente');
+      return await decifrar(chave, cofre.iv, cofre.data);
     }
-    const raw = localStorage.getItem(VAULT_KEY);
-    if (!raw) return null;
-    const { iv, data } = JSON.parse(raw);
-    const chave = await derivarChave(senhaDoNavegador(), salDoNavegador());
-    const plano = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(b64ToBuf(iv)) }, chave, b64ToBuf(data));
-    return JSON.parse(dec(plano));
-  } catch {
-    return null;   // navegador mudou (atualização, idioma): pede as chaves de novo
+    // Formato antigo: abre uma vez e já regrava no formato novo.
+    const chaves = await abrirCofreLegado(cofre);
+    try { await salvarChaves(chaves.deepseekKey, chaves.chatgptKey); } catch { /* segue com o cofre antigo */ }
+    return chaves;
+  } catch (e) {
+    throw new ErroCofre(e);
   }
 }
 
 export const temChavesSalvas = () => { try { return !!localStorage.getItem(VAULT_KEY); } catch { return false; } };
 
-export function esquecerChaves() {
-  [VAULT_KEY, SALT_KEY, ...LEGADO].forEach(k => localStorage.removeItem(k));
+/** Apaga o cofre, a chave de cifra e qualquer resto do formato antigo. */
+export async function esquecerChaves() {
+  [VAULT_KEY, SALT_KEY, ...LEGADO].forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+  try { await apagarChaveDeCifra(); } catch (_) {}
 }
 
 // ── Rascunho ──────────────────────────────────────────────────────────────────
