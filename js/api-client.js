@@ -41,6 +41,21 @@ export class ErroApi extends Error {
   }
 }
 
+/**
+ * Frase para falha de rede ou de tempo, fiel ao número de tentativas que houve.
+ * @param {{tipo: string, tentativas?: number}} e
+ * @param {boolean} [online=true]
+ */
+export function explicarFalhaDeRede(e, online = true) {
+  const n = e?.tentativas ?? 1;
+  const vezes = ['', 'uma', 'duas', 'três'][n] ?? String(n);
+  if (e?.tipo === 'tempo') {
+    return `Passou de ${CONFIG.TIMEOUT_MS / 1000} segundos sem resposta${n > 1 ? `, mesmo depois de ${vezes} tentativas` : ''}.`;
+  }
+  if (!online) return 'Você está sem internet.';
+  return n > 1 ? `A conexão falhou ${vezes} vezes seguidas.` : 'A conexão falhou.';
+}
+
 export const ehCancelamento = e => e?.name === 'AbortError' || e?.tipo === 'cancelado';
 
 // ── Circuit breaker ───────────────────────────────────────────────────────────
@@ -222,6 +237,7 @@ export async function consultar(ia, mensagens, { chave, modelo, temperatura = 0.
       if (ehCancelamento(e) || signal?.aborted) throw e;
       if (!transitorio(e) || e.parcial || tentativa >= CONFIG.MAX_TENTATIVAS) {
         if (transitorio(e)) disj.falha();
+        if (e && typeof e === 'object') e.tentativas = tentativa;   // quantas vezes o pedido saiu de fato
         throw e;
       }
       const espera = CONFIG.ESPERA_BASE_MS * 2 ** (tentativa - 1) * (0.8 + Math.random() * 0.4);

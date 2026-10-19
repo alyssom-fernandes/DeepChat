@@ -2,7 +2,7 @@
    fluxo e a consulta inteira com um fetch falso: nada sai para a rede. */
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { CONFIG, criarLeitorSSE, consultar, ErroApi } from '../js/api-client.js';
+import { CONFIG, criarLeitorSSE, consultar, ErroApi, explicarFalhaDeRede } from '../js/api-client.js';
 import { escreverDemo } from '../js/demo.js';
 
 CONFIG.ESPERA_BASE_MS = 1;   // as novas tentativas não precisam esperar nos testes
@@ -78,6 +78,30 @@ test('consultar: falha antes do primeiro pedaço tenta de novo; depois, não', a
   assert.equal(erro.tipo, 'rede');
   assert.equal(erro.parcial, 'começo da resposta', 'o erro traz o que chegou');
   assert.equal(chamadas.length, 1, 'sem nova tentativa: o começo já estava na tela');
+});
+
+test('consultar: o erro diz quantas tentativas houve de fato', async () => {
+  const ia = outraIA(); outraIA();   // dois usos: mantém a alternância dos outros testes
+  fetchFalso([new TypeError('sem rede')]);   // todas as tentativas falham
+  const todas = await consultar(ia, [], { chave: 'k' }).catch(e => e);
+  assert.equal(todas.tentativas, CONFIG.MAX_TENTATIVAS);
+  assert.equal(chamadas.length, CONFIG.MAX_TENTATIVAS);
+
+  fetchFalso([() => sse([evento('começo')], { falhaNoFim: true })]);   // cai depois de algum texto
+  const uma = await consultar(ia, [], { chave: 'k' }).catch(e => e);
+  assert.equal(uma.tentativas, 1);
+
+  fetchFalso([() => sse([evento('ok'), 'data: [DONE]\n\n'])]);   // zera o disjuntor desta IA para os outros testes
+  assert.equal(await consultar(ia, [], { chave: 'k' }), 'ok');
+});
+
+test('explicarFalhaDeRede: a frase segue o número real de tentativas', () => {
+  assert.equal(explicarFalhaDeRede({ tipo: 'rede', tentativas: 3 }), 'A conexão falhou três vezes seguidas.');
+  assert.equal(explicarFalhaDeRede({ tipo: 'rede', tentativas: 2 }), 'A conexão falhou duas vezes seguidas.');
+  assert.equal(explicarFalhaDeRede({ tipo: 'rede', tentativas: 1 }), 'A conexão falhou.');
+  assert.equal(explicarFalhaDeRede({ tipo: 'rede', tentativas: 3 }, false), 'Você está sem internet.');
+  assert.equal(explicarFalhaDeRede({ tipo: 'tempo', tentativas: 3 }), 'Passou de 60 segundos sem resposta, mesmo depois de três tentativas.');
+  assert.equal(explicarFalhaDeRede({ tipo: 'tempo', tentativas: 1 }), 'Passou de 60 segundos sem resposta.');
 });
 
 test('consultar: o fluxo que fecha sem [DONE] nem motivo de parada é resposta cortada', async () => {
