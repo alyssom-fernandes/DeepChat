@@ -24,6 +24,8 @@ keys needed: three sample conversations, where nothing is sent or saved.
 
 This README is also available in [Portuguese](README.pt-BR.md).
 
+**Case study:** [how it was built and why, with links to the code](https://alyssom-fernandes.github.io/portfolio/en/projetos/deepchat/) on my portfolio.
+
 ## In 30 seconds
 
 1. Open the [demo](https://alyssom-fernandes.github.io/DeepChat/?demo=1).
