@@ -23,6 +23,8 @@ chaves: três conversas de exemplo, em que nada é enviado nem salvo.
 
 Este README também está em [inglês](README.md).
 
+**Estudo de caso:** [como foi construído e por quê, com links para o código](https://alyssom-fernandes.github.io/portfolio/projetos/deepchat/) no meu portfólio.
+
 ## Em 30 segundos
 
 1. Abra a [demonstração](https://alyssom-fernandes.github.io/DeepChat/?demo=1).
